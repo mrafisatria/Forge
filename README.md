@@ -1,48 +1,76 @@
 # Forge Gym Tracker
 
-Forge adalah gym tracker responsif untuk membuat routine, menambahkan exercise beserta foto, dan mencatat set, berat (kg), serta repetisi. Aplikasi memakai Supabase Auth, Postgres, Row Level Security, dan Supabase Storage.
+Gym tracker Next.js untuk routine, exercise, foto, set, beban KG (termasuk koma desimal), dan reps. Database: Supabase project **Lutu**, sama dengan Dompetku; data serta login Forge tetap terpisah.
 
-## Fitur saat ini
+## Login dan keamanan
 
-- Daftar dan login akun dengan Supabase Auth.
-- Membuat, melihat, mengubah, dan menghapus routine.
-- Beberapa exercise di dalam satu routine.
-- Foto exercise dengan upload maksimal 5 MB (JPEG, PNG, atau WebP).
-- Set dinamis dengan nilai kg dan reps.
-- Menambah exercise secara terpisah serta mengedit nama, gambar, kg, reps, dan set langsung dari kartu exercise.
-- Tampilan responsif untuk desktop dan ponsel.
-- Data setiap pengguna dipisahkan dengan Row Level Security.
+- Hanya **satu akun Rafi**, dibatasi juga oleh constraint database. Tidak ada pendaftaran atau login email.
+- Pola login seperti Dompetku: secret key diverifikasi bcrypt di server, token acak 256-bit berlaku 30 hari, hanya hash token yang disimpan di database.
+- Secret akun tidak disimpan di source, GitHub, atau variable frontend.
+- Sesi dan akun Forge menggunakan tabel sendiri; token Dompetku tidak diterima.
+- Pembatas percobaan atomik: 8 per alamat IP / 15 menit dan 40 total / 15 menit. Secret pendek tetap lebih mudah ditebak; gunakan secret panjang dan unik bila memungkinkan.
+- RLS aktif; anon dan authenticated tidak memiliki izin tabel maupun RPC. Semua operasi melalui Edge Function yang memverifikasi sesi serta kepemilikan.
+- Foto JPEG/PNG/WebP maksimal 5 MB, disimpan di bucket privat. Link foto sementara berlaku satu jam; aplikasi menyegarkannya secara berkala.
+- Browser hanya menyimpan token sesi, bukan salinan database. Jika Supabase belum dikonfigurasi, login dinonaktifkan; tidak ada mode demo yang seolah menyimpan data.
 
-## Menyiapkan Supabase
+## Fitur Workout
 
-1. Buka Supabase project yang ingin dipakai. Project yang sama dengan Dompetku juga boleh digunakan karena tabel Forge memakai prefix `gym_` dan bucket tersendiri.
-2. Jalankan seluruh isi [`supabase/schema.sql`](supabase/schema.sql) melalui **SQL Editor**.
-3. Di **Authentication → Providers → Email**, aktifkan Email provider. Untuk penggunaan pribadi, konfirmasi email bisa dimatikan bila diinginkan.
-4. Salin `.env.example` menjadi `.env.local`, lalu isi URL project dan publishable/anon key:
+Buat routine kosong, edit nama/hari/catatan melalui tombol pensil, tambah exercise melalui Add exercise, lalu edit langsung atau hapus exercise melalui menu tiga titik. Input mobile berukuran minimal 16 px agar fokus tidak memicu zoom iOS.
 
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://PROJECT-REF.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR-PUBLISHABLE-KEY
-```
+## Setup Supabase
 
-Jangan memasukkan `service_role` atau secret key ke variable `NEXT_PUBLIC_*`.
+1. Jalankan **supabase/schema.sql** di SQL Editor proyek tujuan. Skrip ini untuk instalasi Forge baru, bukan migrasi dari versi Supabase Auth lama. Tidak mengubah tabel Dompetku.
+2. Buat hash bcrypt secret akun secara lokal memakai **scripts/hash-account-secret.mjs** (membaca dari stdin). Jangan menyimpan secret maupun hash di repository.
+3. Melalui SQL Editor administratif, masukkan hash untuk akun Rafi:
 
-Tanpa environment variable, aplikasi otomatis berjalan dalam mode demo. Perubahan mode demo hanya bertahan selama halaman masih terbuka dan tidak dikirim ke database.
+~~~sql
+insert into public.forge_accounts (name, secret_hash)
+values ('Rafi', '<BCRYPT_HASH>');
+~~~
 
-## Menjalankan lokal
+Jangan jalankan dengan placeholder. Constraint singleton menolak akun kedua. Untuk mengganti secret, perbarui hash melalui administrasi dan cabut sesi Forge yang lama.
 
-```bash
+4. Deploy folder **supabase/functions/forge-api**:
+
+~~~sh
+supabase functions deploy forge-api --project-ref mriotylczlxaxydhorga --no-verify-jwt
+~~~
+
+Atau buat Edge Function bernama **forge-api** di dashboard, masukkan **index.ts**, **handler.ts**, **validation.ts**, dan **deno.json**, lalu deploy. Verifikasi JWT bawaan dimatikan **hanya untuk forge-api** karena fungsi ini memeriksa token sesi Forge sendiri. Jangan mengubah dompetku-api.
+
+Server menggunakan SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY/SUPABASE_SECRET_KEYS bawaan Edge Functions. Jangan menyalin key server ke frontend.
+
+Tabel baru: forge_accounts, forge_sessions, forge_login_attempts, gym_routines, gym_exercises, gym_exercise_sets. Bucket: forge-exercise-images (privat).
+
+Dokumentasi resmi: [konfigurasi Edge Functions](https://supabase.com/docs/guides/functions/function-configuration), [bucket privat](https://supabase.com/docs/guides/storage/buckets/fundamentals).
+
+## Lokal dan Vercel
+
+Isi **.env.local** (diabaikan Git) dengan:
+
+~~~env
+NEXT_PUBLIC_SUPABASE_URL=https://mriotylczlxaxydhorga.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<PUBLISHABLE_OR_ANON_KEY>
+~~~
+
+Nama ANON_KEY juga menerima publishable key. Jangan memasukkan service_role/secret API key ke variable NEXT_PUBLIC_*.
+
+~~~sh
 npm install
 npm run dev
-```
+~~~
 
-Buka `http://localhost:3000`.
+Di Vercel, import repository Forge sebagai Next.js, tambahkan kedua variable di **Project Settings → Environment Variables**, lalu redeploy. Env lokal tidak otomatis dikirim ke Vercel. Frontend Vercel dan Edge Function Supabase adalah dua deployment terpisah.
 
-## Deploy ke Vercel
+## Pemeriksaan
 
-1. Import repository ini ke Vercel.
-2. Framework akan terdeteksi sebagai **Next.js**.
-3. Tambahkan `NEXT_PUBLIC_SUPABASE_URL` dan `NEXT_PUBLIC_SUPABASE_ANON_KEY` di **Project Settings → Environment Variables** untuk Production, Preview, dan Development.
-4. Deploy ulang setelah environment variable tersimpan.
+~~~sh
+npm test
+npm run typecheck:api
+npm run lint
+npm run build
+~~~
 
-Tidak ada secret server-side yang diperlukan oleh frontend.
+Test lokal memakai backend tiruan: autentikasi Rafi, pembatas login, isolasi sesi/owner, logout, validasi data dan foto. Tetap periksa koneksi nyata setelah schema dan Edge Function terpasang.
+
+Foto yang diganti/dihapus dari routine tidak otomatis dihapus dari Storage untuk menghindari kehilangan foto saat ada kegagalan penyimpanan; bersihkan file yatim lewat administrasi bila diperlukan.

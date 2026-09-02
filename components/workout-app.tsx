@@ -17,96 +17,21 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
-  Sparkles,
   Trash2,
   X,
 } from 'lucide-react';
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import type { User } from '@supabase/supabase-js';
-import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ApiError, apiRequest, isSupabaseConfigured, readSession, rememberSession, sessionStorageKey, type ForgeSession, type RoutinesResponse } from '@/lib/api';
 import type { DraftExercise, DraftSet, Exercise, Routine, RoutineDraft } from '@/lib/types';
 
 const uid = () => crypto.randomUUID();
 
 function parseWeight(value: string) {
-  const parsed = Number.parseFloat(value.trim().replace(',', '.'));
-  return Number.isFinite(parsed) ? parsed : 0;
+  const normalized = value.trim().replace(',', '.');
+  if (!normalized) return 0;
+  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) throw new Error('Isi beban dengan angka, misalnya 2,5 (maksimal dua desimal).');
+  return Number(normalized);
 }
-
-const demoRoutines: Routine[] = [
-  {
-    id: 'demo-upper',
-    name: 'Upper Body Power',
-    training_day: 'Senin',
-    note: 'Fokus pada kekuatan dada dan punggung.',
-    created_at: new Date().toISOString(),
-    gym_exercises: [
-      {
-        id: 'demo-bench',
-        name: 'Incline Chest Press',
-        image_url: null,
-        sort_order: 0,
-        gym_exercise_sets: [
-          { id: 'set-1', set_number: 1, weight_kg: 20, reps: 10 },
-          { id: 'set-2', set_number: 2, weight_kg: 20, reps: 10 },
-          { id: 'set-3', set_number: 3, weight_kg: 20, reps: 10 },
-          { id: 'set-4', set_number: 4, weight_kg: 15, reps: 12 },
-        ],
-      },
-      {
-        id: 'demo-row',
-        name: 'Iso-Lateral Row',
-        image_url: null,
-        sort_order: 1,
-        gym_exercise_sets: [
-          { id: 'set-5', set_number: 1, weight_kg: 25, reps: 10 },
-          { id: 'set-6', set_number: 2, weight_kg: 25, reps: 10 },
-          { id: 'set-7', set_number: 3, weight_kg: 22.5, reps: 12 },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'demo-legs',
-    name: 'Leg Day Strength',
-    training_day: 'Rabu',
-    note: 'Compound lift dan aksesori kaki.',
-    created_at: new Date().toISOString(),
-    gym_exercises: [
-      {
-        id: 'demo-squat',
-        name: 'Barbell Squat',
-        image_url: null,
-        sort_order: 0,
-        gym_exercise_sets: [
-          { id: 'set-8', set_number: 1, weight_kg: 40, reps: 8 },
-          { id: 'set-9', set_number: 2, weight_kg: 40, reps: 8 },
-          { id: 'set-10', set_number: 3, weight_kg: 35, reps: 10 },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'demo-arms',
-    name: 'Arms & Shoulders',
-    training_day: 'Jumat',
-    note: 'Volume ringan menjelang akhir minggu.',
-    created_at: new Date().toISOString(),
-    gym_exercises: [
-      {
-        id: 'demo-curl',
-        name: 'Dumbbell Curl',
-        image_url: null,
-        sort_order: 0,
-        gym_exercise_sets: [
-          { id: 'set-11', set_number: 1, weight_kg: 10, reps: 12 },
-          { id: 'set-12', set_number: 2, weight_kg: 10, reps: 12 },
-          { id: 'set-13', set_number: 3, weight_kg: 8, reps: 15 },
-        ],
-      },
-    ],
-  },
-];
 
 function newSet(index: number): DraftSet {
   return { clientId: uid(), weightKg: '', reps: index === 0 ? '10' : '' };
@@ -117,6 +42,7 @@ function newExercise(): DraftExercise {
     clientId: uid(),
     name: '',
     imageUrl: null,
+    imagePath: null,
     imageFile: null,
     sets: [newSet(0), newSet(1), newSet(2)],
   };
@@ -139,6 +65,7 @@ function draftFromRoutine(routine: Routine): RoutineDraft {
         clientId: exercise.id,
         name: exercise.name,
         imageUrl: exercise.image_url,
+        imagePath: exercise.image_path,
         imageFile: null,
         sets: exercise.gym_exercise_sets
           .slice()
@@ -166,6 +93,7 @@ function exerciseToDraft(exercise: Exercise): DraftExercise {
     clientId: exercise.id,
     name: exercise.name,
     imageUrl: exercise.image_url,
+    imagePath: exercise.image_path,
     imageFile: null,
     sets: exercise.gym_exercise_sets
       .slice()
@@ -177,7 +105,7 @@ function exerciseToDraft(exercise: Exercise): DraftExercise {
 function exercisesForRpc(exercises: Exercise[]) {
   return exercises.map((exercise, index) => ({
     name: exercise.name,
-    image_url: exercise.image_url,
+    image_path: exercise.image_path,
     sort_order: index,
     sets: exercise.gym_exercise_sets.map((set, setIndex) => ({
       set_number: setIndex + 1,
@@ -187,16 +115,14 @@ function exercisesForRpc(exercises: Exercise[]) {
   }));
 }
 
-function initials(email?: string) {
-  if (!email) return 'MR';
-  return email.slice(0, 2).toUpperCase();
-}
-
 export default function WorkoutApp() {
-  const [user, setUser] = useState<User | null>(null);
-  const [authReady, setAuthReady] = useState(!isSupabaseConfigured);
-  const [routines, setRoutines] = useState<Routine[]>(isSupabaseConfigured ? [] : demoRoutines);
-  const [loading, setLoading] = useState(isSupabaseConfigured);
+  const [session, setSession] = useState<ForgeSession | null>(null);
+  const sessionRef = useRef<ForgeSession | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [authError, setAuthError] = useState('');
+  const [routines, setRoutines] = useState<Routine[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [draft, setDraft] = useState<RoutineDraft | null>(null);
@@ -211,43 +137,113 @@ export default function WorkoutApp() {
 
   const showToast = useCallback((message: string) => {
     setToast(message);
-    window.setTimeout(() => setToast(null), 2800);
+    window.setTimeout(() => setToast(null), 4000);
   }, []);
 
-  const loadRoutines = useCallback(async () => {
-    const supabase = getSupabase();
-    if (!supabase) return;
+  const clearSession = useCallback(() => {
+    sessionRef.current = null;
+    rememberSession(null);
+    setSession(null);
+    setRoutines([]);
+    setSelectedId(null);
+    setEditorOpen(false);
+    setDraft(null);
+    setMobileMenu(false);
+    setLoadError('');
+    setToast(null);
+  }, []);
 
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('gym_routines')
-      .select('id,name,training_day,note,created_at,gym_exercises(id,name,image_url,sort_order,gym_exercise_sets(id,set_number,weight_kg,reps))')
-      .order('created_at', { ascending: false });
+  const handleError = useCallback((error: unknown) => {
+    const message = error instanceof Error ? error.message : 'Koneksi gagal. Silakan coba lagi.';
+    if (error instanceof ApiError && error.status === 401) {
+      clearSession();
+      setAuthError(message);
+    } else showToast(message);
+    return message;
+  }, [clearSession, showToast]);
 
-    if (error) showToast(`Gagal mengambil routine: ${error.message}`);
-    else setRoutines(((data ?? []) as unknown as Routine[]).map(normalizeRoutine));
-    setLoading(false);
-  }, [showToast]);
+  const loadRoutines = useCallback(async (token: string, quiet = false) => {
+    if (!quiet) setLoading(true);
+    try {
+      const data = await apiRequest<RoutinesResponse>('/routines', { token });
+      if (sessionRef.current?.session_token !== token) return;
+      setRoutines(data.routines.map(normalizeRoutine));
+      setLoadError('');
+    } catch (error) {
+      if (sessionRef.current?.session_token !== token) return;
+      setLoadError(handleError(error));
+      throw error;
+    } finally {
+      if (!quiet) setLoading(false);
+    }
+  }, [handleError]);
 
   useEffect(() => {
-    const supabase = getSupabase();
-    if (!supabase) return;
+    let controller: AbortController;
+    async function restore() {
+      controller?.abort();
+      controller = new AbortController();
+      const signal = controller.signal;
+      const saved = readSession();
+      setAuthReady(false);
+      sessionRef.current = null;
+      setSession(null);
+      setRoutines([]);
+      setEditorOpen(false);
+      setDraft(null);
+      setSelectedId(null);
+      setMobileMenu(false);
+      if (saved && isSupabaseConfigured) {
+        try {
+          const data = await apiRequest<RoutinesResponse>('/routines', { token: saved.session_token, signal });
+          if (signal.aborted) return;
+          const verified = { ...saved, user: data.user };
+          sessionRef.current = verified;
+          setSession(verified);
+          setRoutines(data.routines.map(normalizeRoutine));
+          setAuthError('');
+        } catch (error) {
+          if (signal.aborted) return;
+          if (error instanceof ApiError && error.status === 401) rememberSession(null);
+          setAuthError(error instanceof Error ? error.message : 'Sesi belum dapat diperiksa. Silakan masuk kembali.');
+        }
+      }
+      if (!signal.aborted) setAuthReady(true);
+    }
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === sessionStorageKey || event.key === null) void restore();
+    };
+    void restore();
+    window.addEventListener('storage', onStorage);
+    return () => { controller?.abort(); window.removeEventListener('storage', onStorage); };
+  }, []);
 
-    supabase.auth.getSession().then(({ data }) => {
-      setUser(data.session?.user ?? null);
-      setAuthReady(true);
-      if (data.session?.user) loadRoutines();
-    });
+  useEffect(() => {
+    if (!session) return;
+    // Refresh signed image links; the database remains the source of truth.
+    const refresh = () => {
+      if (document.visibilityState === 'visible') void loadRoutines(session.session_token, true).catch(() => {});
+    };
+    const timer = window.setInterval(refresh, 20 * 60 * 1000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', refresh); };
+  }, [session, loadRoutines]);
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      setAuthReady(true);
-      if (session?.user) loadRoutines();
-      else setRoutines([]);
-    });
+  async function onAuthenticated(nextSession: ForgeSession) {
+    sessionRef.current = nextSession;
+    rememberSession(nextSession);
+    setSession(nextSession);
+    setAuthError('');
+    await loadRoutines(nextSession.session_token).catch(() => {});
+  }
 
-    return () => listener.subscription.unsubscribe();
-  }, [loadRoutines]);
+  async function signOut() {
+    if (!session) return;
+    try {
+      await apiRequest('/logout', { method: 'POST', token: session.session_token });
+      clearSession();
+    } catch (error) { handleError(error); }
+  }
 
   function openNewRoutine() {
     setDraft(emptyDraft());
@@ -260,238 +256,133 @@ export default function WorkoutApp() {
   }
 
   async function uploadImage(exercise: DraftExercise, routineId: string) {
-    if (!exercise.imageFile) return exercise.imageUrl;
-    const supabase = getSupabase();
-    if (!supabase || !user) return URL.createObjectURL(exercise.imageFile);
-
-    const extension = exercise.imageFile.name.split('.').pop()?.toLowerCase() || 'jpg';
-    const filePath = `${user.id}/${routineId}/${uid()}.${extension}`;
-    const { error } = await supabase.storage.from('forge-exercise-images').upload(filePath, exercise.imageFile, {
-      cacheControl: '3600',
-      upsert: false,
+    if (!exercise.imageFile) return { image_path: exercise.imagePath, image_url: exercise.imageUrl };
+    if (!session) throw new ApiError('Silakan masuk kembali.', 401);
+    if (exercise.imageFile.size > 5 * 1024 * 1024) throw new Error('Ukuran foto maksimal 5 MB.');
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(exercise.imageFile.type)) {
+      throw new Error('Gunakan foto JPEG, PNG, atau WebP.');
+    }
+    const body = new FormData();
+    body.append('routine_id', routineId);
+    body.append('file', exercise.imageFile);
+    return apiRequest<{ image_path: string; image_url: string }>('/images', {
+      method: 'POST', token: session.session_token, body,
     });
-    if (error) throw error;
-    return supabase.storage.from('forge-exercise-images').getPublicUrl(filePath).data.publicUrl;
   }
 
   async function saveRoutine(event: FormEvent) {
     event.preventDefault();
-    if (!draft || !draft.name.trim()) return showToast('Nama routine wajib diisi.');
+    if (!session || !draft || !draft.name.trim()) return showToast('Nama routine wajib diisi.');
     if (draft.exercises.some((exercise) => !exercise.name.trim())) return showToast('Isi nama setiap exercise yang ditambahkan.');
-
     setSaving(true);
     try {
       const routineId = draft.id ?? uid();
-      const supabase = getSupabase();
-      if (draft.id) {
-        if (supabase && user) {
-          const { error } = await supabase
-            .from('gym_routines')
-            .update({ name: draft.name.trim(), training_day: draft.trainingDay.trim() || null, note: draft.note.trim() || null })
-            .eq('id', draft.id);
-          if (error) throw error;
-          await loadRoutines();
-        } else {
-          setRoutines((current) => current.map((routine) => routine.id === draft.id ? {
-            ...routine,
-            name: draft.name.trim(),
-            training_day: draft.trainingDay.trim() || null,
-            note: draft.note.trim() || null,
-          } : routine));
-        }
-      } else {
-        const exercisePayload = await Promise.all(
-          draft.exercises.map(async (exercise, index) => ({
-            name: exercise.name.trim(),
-            image_url: await uploadImage(exercise, routineId),
-            sort_order: index,
-            sets: exercise.sets.map((set, setIndex) => ({ set_number: setIndex + 1, weight_kg: parseWeight(set.weightKg), reps: Number(set.reps) || 0 })),
-          })),
-        );
-
-        if (supabase && user) {
-          const { error } = await supabase.rpc('save_gym_routine', {
-            p_routine_id: routineId,
-            p_name: draft.name.trim(),
-            p_training_day: draft.trainingDay.trim() || null,
-            p_note: draft.note.trim() || null,
-            p_exercises: exercisePayload,
-          });
-          if (error) throw error;
-          await loadRoutines();
-        } else {
-          const localRoutine: Routine = {
-            id: routineId,
-            name: draft.name.trim(),
-            training_day: draft.trainingDay.trim() || null,
-            note: draft.note.trim() || null,
-            created_at: new Date().toISOString(),
-            gym_exercises: exercisePayload.map((exercise, index) => ({
-              id: uid(),
-              name: exercise.name,
-              image_url: exercise.image_url,
-              sort_order: index,
-              gym_exercise_sets: exercise.sets.map((set) => ({ id: uid(), ...set })),
-            })),
-          };
-          setRoutines((current) => [localRoutine, ...current]);
-        }
-      }
-
+      const exercisePayload = draft.id ? undefined : await Promise.all(
+        draft.exercises.map(async (exercise) => ({
+          name: exercise.name.trim(),
+          image_path: (await uploadImage(exercise, routineId)).image_path,
+          sets: exercise.sets.map((set) => ({ weight_kg: parseWeight(set.weightKg), reps: Number(set.reps) || 0 })),
+        })),
+      );
+      await apiRequest('/routines', {
+        method: draft.id ? 'PATCH' : 'POST', token: session.session_token,
+        body: { id: routineId, name: draft.name.trim(), training_day: draft.trainingDay.trim(), note: draft.note.trim(), exercises: exercisePayload },
+      });
       setEditorOpen(false);
       setDraft(null);
+      await loadRoutines(session.session_token);
       showToast(draft.id ? 'Routine berhasil diperbarui.' : 'Routine baru berhasil dibuat.');
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Routine gagal disimpan.');
-    } finally {
-      setSaving(false);
-    }
+    } catch (error) { handleError(error); }
+    finally { setSaving(false); }
   }
 
   async function saveExercise(routine: Routine, exerciseDraft: DraftExercise, exerciseId: string | null) {
-    if (!exerciseDraft.name.trim()) {
-      showToast('Nama exercise wajib diisi.');
-      return false;
-    }
-    if (!exerciseDraft.sets.length) {
-      showToast('Tambahkan minimal satu set.');
-      return false;
-    }
-
+    if (!session) return false;
+    if (!exerciseDraft.name.trim()) { showToast('Nama exercise wajib diisi.'); return false; }
+    if (!exerciseDraft.sets.length) { showToast('Tambahkan minimal satu set.'); return false; }
     try {
-      const imageUrl = await uploadImage(exerciseDraft, routine.id);
-      const previousExercise = exerciseId ? routine.gym_exercises.find((exercise) => exercise.id === exerciseId) : null;
+      const image = await uploadImage(exerciseDraft, routine.id);
+      const previous = routine.gym_exercises.find((exercise) => exercise.id === exerciseId);
       const nextExercise: Exercise = {
-        id: exerciseId ?? uid(),
-        name: exerciseDraft.name.trim(),
-        image_url: imageUrl,
-        sort_order: previousExercise?.sort_order ?? routine.gym_exercises.length,
+        id: exerciseId ?? uid(), name: exerciseDraft.name.trim(), ...image,
+        sort_order: previous?.sort_order ?? routine.gym_exercises.length,
         gym_exercise_sets: exerciseDraft.sets.map((set, index) => ({
-          id: previousExercise?.gym_exercise_sets[index]?.id ?? uid(),
-          set_number: index + 1,
-          weight_kg: parseWeight(set.weightKg),
-          reps: Number(set.reps) || 0,
+          id: previous?.gym_exercise_sets[index]?.id ?? uid(), set_number: index + 1,
+          weight_kg: parseWeight(set.weightKg), reps: Number(set.reps) || 0,
         })),
       };
       const nextExercises = exerciseId
         ? routine.gym_exercises.map((exercise) => exercise.id === exerciseId ? nextExercise : exercise)
         : [...routine.gym_exercises, nextExercise];
-
-      const supabase = getSupabase();
-      if (supabase && user) {
-        const { error } = await supabase.rpc('save_gym_routine', {
-          p_routine_id: routine.id,
-          p_name: routine.name,
-          p_training_day: routine.training_day,
-          p_note: routine.note,
-          p_exercises: exercisesForRpc(nextExercises),
-        });
-        if (error) throw error;
-        await loadRoutines();
-      } else {
-        setRoutines((current) => current.map((item) => item.id === routine.id ? { ...item, gym_exercises: nextExercises } : item));
-      }
-
+      await apiRequest('/routines', {
+        method: 'PUT', token: session.session_token,
+        body: { id: routine.id, exercises: exercisesForRpc(nextExercises) },
+      });
+      setRoutines((current) => current.map((item) => item.id === routine.id ? { ...item, gym_exercises: nextExercises } : item));
+      await loadRoutines(session.session_token).catch(() => {});
       showToast(exerciseId ? 'Exercise berhasil diperbarui.' : 'Exercise baru berhasil ditambahkan.');
       return true;
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Exercise gagal disimpan.');
-      return false;
-    }
+    } catch (error) { handleError(error); return false; }
   }
 
   async function deleteExercise(routine: Routine, exercise: Exercise) {
-    if (!window.confirm(`Hapus exercise “${exercise.name}”?`)) return false;
+    if (!session || !window.confirm('Hapus exercise “' + exercise.name + '”?')) return false;
     try {
       const nextExercises = routine.gym_exercises.filter((item) => item.id !== exercise.id);
-      const supabase = getSupabase();
-      if (supabase && user) {
-        const { error } = await supabase.rpc('save_gym_routine', {
-          p_routine_id: routine.id,
-          p_name: routine.name,
-          p_training_day: routine.training_day,
-          p_note: routine.note,
-          p_exercises: exercisesForRpc(nextExercises),
-        });
-        if (error) throw error;
-        await loadRoutines();
-      } else {
-        setRoutines((current) => current.map((item) => item.id === routine.id ? { ...item, gym_exercises: nextExercises } : item));
-      }
+      await apiRequest('/routines', {
+        method: 'PUT', token: session.session_token,
+        body: { id: routine.id, exercises: exercisesForRpc(nextExercises) },
+      });
+      setRoutines((current) => current.map((item) => item.id === routine.id ? { ...item, gym_exercises: nextExercises } : item));
+      await loadRoutines(session.session_token).catch(() => {});
       showToast('Exercise telah dihapus.');
       return true;
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Exercise gagal dihapus.');
-      return false;
-    }
+    } catch (error) { handleError(error); return false; }
   }
 
   async function deleteRoutine(routine: Routine) {
-    if (!window.confirm(`Hapus routine “${routine.name}”?`)) return;
-    const supabase = getSupabase();
-    if (supabase && user) {
-      const { error } = await supabase.from('gym_routines').delete().eq('id', routine.id);
-      if (error) return showToast(error.message);
-    }
-    setRoutines((current) => current.filter((item) => item.id !== routine.id));
-    setSelectedId(null);
-    showToast('Routine telah dihapus.');
+    if (!session || !window.confirm('Hapus routine “' + routine.name + '”?')) return;
+    try {
+      await apiRequest('/routines', { method: 'DELETE', token: session.session_token, body: { id: routine.id } });
+      setRoutines((current) => current.filter((item) => item.id !== routine.id));
+      setSelectedId(null);
+      showToast('Routine telah dihapus.');
+    } catch (error) { handleError(error); }
   }
 
-  if (!authReady) {
-    return <div className="full-loader"><LoaderCircle className="spin" size={26} /><span>Menyiapkan Forge...</span></div>;
-  }
-
-  if (isSupabaseConfigured && !user) return <AuthScreen onToast={showToast} />;
+  if (!authReady) return <div className="full-loader"><LoaderCircle className="spin" size={26} /><span>Menyiapkan Forge...</span></div>;
+  if (!session) return <AuthScreen onAuthenticated={onAuthenticated} initialError={authError} />;
 
   return (
     <main className="app-shell">
-      <Sidebar user={user} open={mobileMenu} onClose={() => setMobileMenu(false)} />
-
+      <Sidebar open={mobileMenu} onClose={() => setMobileMenu(false)} onSignOut={signOut} />
       <section className="content">
-        {!isSupabaseConfigured && (
-          <div className="setup-banner"><Sparkles size={16} /><span><strong>Mode demo.</strong> Hubungkan Supabase agar routine tersimpan dan sinkron di semua perangkat.</span></div>
-        )}
-
         <header className="topbar">
           <button className="mobile-menu-button" onClick={() => setMobileMenu(true)} aria-label="Buka menu"><Menu size={20} /></button>
-          <div>
-            <p className="eyebrow">WORKOUT</p>
-            <h1>{selectedRoutine ? selectedRoutine.name : 'Ready to get stronger?'}</h1>
-          </div>
-          <div className="profile-chip"><div className="avatar">{initials(user?.email)}</div><div><strong>{user?.email?.split('@')[0] ?? 'Demo athlete'}</strong><span>Keep showing up</span></div></div>
+          <div><p className="eyebrow">WORKOUT</p><h1>{selectedRoutine ? selectedRoutine.name : 'Ready to get stronger?'}</h1></div>
+          <div className="profile-chip"><div className="avatar">RA</div><div><strong>{session.user.name}</strong><span>Keep showing up</span></div></div>
         </header>
-
+        {loadError && <div className="connection-error" role="alert"><span>{loadError}</span><button className="secondary-button" onClick={() => void loadRoutines(session.session_token).catch(() => {})}>Coba lagi</button></div>}
         {selectedRoutine ? (
-          <RoutineDetail routine={selectedRoutine} onBack={() => setSelectedId(null)} onEditInfo={() => openEditRoutine(selectedRoutine)} onDelete={() => deleteRoutine(selectedRoutine)} onSaveExercise={saveExercise} onDeleteExercise={deleteExercise} />
+          <RoutineDetail key={selectedRoutine.id} routine={selectedRoutine} onBack={() => setSelectedId(null)} onEditInfo={() => openEditRoutine(selectedRoutine)} onDelete={() => deleteRoutine(selectedRoutine)} onSaveExercise={saveExercise} onDeleteExercise={deleteExercise} />
         ) : (
           <RoutineOverview routines={routines} loading={loading} onCreate={openNewRoutine} onOpen={setSelectedId} />
         )}
       </section>
-
-      {editorOpen && draft && (
-        <RoutineEditor draft={draft} setDraft={setDraft} saving={saving} onClose={() => setEditorOpen(false)} onSave={saveRoutine} />
-      )}
-
-      {toast && <div className="toast"><Check size={17} />{toast}</div>}
+      {editorOpen && draft && <RoutineEditor draft={draft} setDraft={setDraft} saving={saving} onClose={() => setEditorOpen(false)} onSave={saveRoutine} />}
+      {toast && <div className="toast" role="status"><Check size={17} />{toast}</div>}
     </main>
   );
 }
 
-function Sidebar({ user, open, onClose }: { user: User | null; open: boolean; onClose: () => void }) {
-  async function signOut() {
-    await getSupabase()?.auth.signOut();
-  }
-
+function Sidebar({ open, onClose, onSignOut }: { open: boolean; onClose: () => void; onSignOut: () => void }) {
   return (
     <>
       {open && <button className="menu-overlay" onClick={onClose} aria-label="Tutup menu" />}
-      <aside className={`sidebar ${open ? 'open' : ''}`}>
+      <aside className={'sidebar ' + (open ? 'open' : '')}>
         <div className="brand"><span className="brand-mark"><Dumbbell size={19} /></span><span>FORGE</span></div>
-        <nav>
-          <button className="active"><Dumbbell size={19} /><span>Workout</span></button>
-        </nav>
-        {user && <div className="sidebar-bottom"><button onClick={signOut}><LogOut size={18} /><span>Keluar</span></button></div>}
+        <nav><button className="active" onClick={onClose}><Dumbbell size={19} /><span>Workout</span></button></nav>
+        <div className="sidebar-bottom"><button onClick={onSignOut}><LogOut size={18} /><span>Keluar</span></button></div>
       </aside>
     </>
   );
@@ -716,23 +607,24 @@ function RoutineEditor({ draft, setDraft, saving, onClose, onSave }: { draft: Ro
   );
 }
 
-function AuthScreen({ onToast }: { onToast: (message: string) => void }) {
-  const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+function AuthScreen({ onAuthenticated, initialError }: { onAuthenticated: (session: ForgeSession) => Promise<void>; initialError: string }) {
+  const [secretKey, setSecretKey] = useState('');
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(initialError);
+  const [visible, setVisible] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    const supabase = getSupabase();
-    if (!supabase) return;
+    if (busy || !isSupabaseConfigured) return;
     setBusy(true);
-    const result = mode === 'login'
-      ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signUp({ email, password });
-    setBusy(false);
-    if (result.error) onToast(result.error.message);
-    else if (mode === 'register' && !result.data.session) onToast('Cek email untuk konfirmasi akun, lalu masuk kembali.');
+    setError('');
+    try {
+      const nextSession = await apiRequest<ForgeSession>('/login', { method: 'POST', body: { secret_key: secretKey } });
+      setSecretKey('');
+      await onAuthenticated(nextSession);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Tidak dapat masuk. Coba lagi.');
+    } finally { setBusy(false); }
   }
 
   return (
@@ -741,11 +633,15 @@ function AuthScreen({ onToast }: { onToast: (message: string) => void }) {
       <section className="auth-form-panel">
         <form className="auth-card" onSubmit={submit}>
           <div className="auth-icon"><CircleUserRound size={24} /></div>
-          <p className="eyebrow">WELCOME TO FORGE</p><h2>{mode === 'login' ? 'Masuk ke akunmu' : 'Mulai perjalananmu'}</h2><p className="auth-subtitle">Routine kamu tersimpan aman dan selalu sinkron.</p>
-          <div className="auth-tabs"><button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => setMode('login')}>Masuk</button><button type="button" className={mode === 'register' ? 'active' : ''} onClick={() => setMode('register')}>Daftar</button></div>
-          <label className="field"><span>Email</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="kamu@email.com" required /></label>
-          <label className="field"><span>Password</span><input type="password" minLength={6} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Minimal 6 karakter" required /></label>
-          <button className="auth-submit" disabled={busy}>{busy ? <LoaderCircle className="spin" size={18} /> : mode === 'login' ? 'Masuk ke Forge' : 'Buat akun'}<ChevronRight size={18} /></button>
+          <p className="eyebrow">WELCOME BACK, RAFI</p><h2>Masuk ke Forge</h2><p className="auth-subtitle">Gunakan secret key untuk membuka workout kamu.</p>
+          <div className="auth-account"><div className="avatar">RA</div><div><strong>Rafi</strong><span>Akun pribadi</span></div></div>
+          {!isSupabaseConfigured && <p className="auth-error" role="alert">Koneksi Supabase belum dikonfigurasi. Tambahkan konfigurasi database di pengaturan deployment.</p>}
+          <input type="text" name="username" autoComplete="username" value="Rafi" readOnly hidden />
+          <label className="field"><span>Secret key</span><input name="password" type={visible ? 'text' : 'password'} value={secretKey} onChange={(event) => setSecretKey(event.target.value)} autoComplete="current-password" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="Masukkan secret key" required maxLength={72} disabled={busy} aria-describedby={error ? 'login-error' : undefined} /></label>
+          <button type="button" className="secret-toggle" onClick={() => setVisible(!visible)} aria-pressed={visible}>{visible ? 'Sembunyikan secret key' : 'Tampilkan secret key'}</button>
+          {error && <p id="login-error" className="auth-error" role="alert">{error}</p>}
+          <button className="auth-submit" disabled={busy || !isSupabaseConfigured}>{busy ? <LoaderCircle className="spin" size={18} /> : 'Masuk ke Forge'}<ChevronRight size={18} /></button>
+          <p className="auth-footnote">Khusus akun Rafi. Tidak ada pendaftaran akun baru.</p>
         </form>
       </section>
     </main>

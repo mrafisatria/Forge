@@ -9,6 +9,7 @@ export type Exercise = {
   id: string;
   name: string;
   image_url: string | null;
+  image_path: string | null;
   sort_order: number;
   gym_exercise_sets: WorkoutSet[];
 };
@@ -32,6 +33,7 @@ export type DraftExercise = {
   clientId: string;
   name: string;
   imageUrl: string | null;
+  imagePath: string | null;
   imageFile: File | null;
   sets: DraftSet[];
 };

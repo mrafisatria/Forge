@@ -1,0 +1,7 @@
+project_id = "forge"
+
+[functions.forge-api]
+enabled = true
+# Custom Forge bearer sessions are checked inside the function; not Supabase Auth JWTs.
+verify_jwt = false
+entrypoint = "./functions/forge-api/index.ts"
