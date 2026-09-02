@@ -4,26 +4,21 @@
 /* eslint-disable @next/next/no-img-element */
 
 import {
-  Activity,
   ArrowLeft,
   ArrowUpRight,
-  CalendarDays,
   Check,
   ChevronRight,
   CircleUserRound,
   Dumbbell,
   ImagePlus,
-  LayoutDashboard,
   LoaderCircle,
   LogOut,
   Menu,
   MoreHorizontal,
   Pencil,
   Plus,
-  Settings2,
   Sparkles,
   Trash2,
-  Trophy,
   X,
 } from 'lucide-react';
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
@@ -347,7 +342,7 @@ export default function WorkoutApp() {
         </header>
 
         {selectedRoutine ? (
-          <RoutineDetail routine={selectedRoutine} onBack={() => setSelectedId(null)} onEdit={() => openEditRoutine(selectedRoutine)} onDelete={() => deleteRoutine(selectedRoutine)} onToast={showToast} />
+          <RoutineDetail routine={selectedRoutine} onBack={() => setSelectedId(null)} onEdit={() => openEditRoutine(selectedRoutine)} onDelete={() => deleteRoutine(selectedRoutine)} />
         ) : (
           <RoutineOverview routines={routines} loading={loading} onCreate={openNewRoutine} onOpen={setSelectedId} />
         )}
@@ -373,15 +368,9 @@ function Sidebar({ user, open, onClose }: { user: User | null; open: boolean; on
       <aside className={`sidebar ${open ? 'open' : ''}`}>
         <div className="brand"><span className="brand-mark"><Dumbbell size={19} /></span><span>FORGE</span></div>
         <nav>
-          <button disabled><LayoutDashboard size={19} /><span>Overview</span><small>Soon</small></button>
           <button className="active"><Dumbbell size={19} /><span>Workout</span></button>
-          <button disabled><Activity size={19} /><span>Progress</span><small>Soon</small></button>
-          <button disabled><CalendarDays size={19} /><span>Calendar</span><small>Soon</small></button>
         </nav>
-        <div className="sidebar-bottom">
-          <button disabled><Settings2 size={18} /><span>Settings</span></button>
-          {user && <button onClick={signOut}><LogOut size={18} /><span>Keluar</span></button>}
-        </div>
+        {user && <div className="sidebar-bottom"><button onClick={signOut}><LogOut size={18} /><span>Keluar</span></button></div>}
       </aside>
     </>
   );
@@ -427,22 +416,9 @@ function RoutineOverview({ routines, loading, onCreate, onOpen }: { routines: Ro
   );
 }
 
-function RoutineDetail({ routine, onBack, onEdit, onDelete, onToast }: { routine: Routine; onBack: () => void; onEdit: () => void; onDelete: () => void; onToast: (message: string) => void }) {
-  const [running, setRunning] = useState(false);
-  const [checkedSets, setCheckedSets] = useState<string[]>([]);
+function RoutineDetail({ routine, onBack, onEdit, onDelete }: { routine: Routine; onBack: () => void; onEdit: () => void; onDelete: () => void }) {
   const totalSets = routine.gym_exercises.reduce((sum, exercise) => sum + exercise.gym_exercise_sets.length, 0);
   const totalVolume = routine.gym_exercises.reduce((sum, exercise) => sum + exercise.gym_exercise_sets.reduce((sub, set) => sub + set.weight_kg * set.reps, 0), 0);
-
-  function toggleSet(id: string) {
-    if (!running) return;
-    setCheckedSets((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
-  }
-
-  function finishWorkout() {
-    setRunning(false);
-    setCheckedSets([]);
-    onToast('Workout selesai. Nice work!');
-  }
 
   return (
     <section className="detail-view">
@@ -451,16 +427,10 @@ function RoutineDetail({ routine, onBack, onEdit, onDelete, onToast }: { routine
         <div><button className="icon-action" onClick={onEdit} aria-label="Edit routine"><Pencil size={17} /></button><button className="icon-action danger" onClick={onDelete} aria-label="Hapus routine"><Trash2 size={17} /></button></div>
       </div>
 
-      <div className="detail-hero">
-        <div><span>{routine.training_day || 'Fleksibel'}</span><h2>{routine.name}</h2><p>{routine.note || 'Routine siap digunakan.'}</p></div>
-        {running ? <button className="finish-button" onClick={finishWorkout}><Trophy size={18} /> Selesaikan workout</button> : <button onClick={() => setRunning(true)}><Dumbbell size={18} /> Start routine</button>}
-      </div>
-
       <div className="detail-stats">
         <article><span>EXERCISE</span><strong>{routine.gym_exercises.length}</strong></article>
         <article><span>TOTAL SET</span><strong>{totalSets}</strong></article>
         <article><span>EST. VOLUME</span><strong>{totalVolume.toLocaleString('id-ID')} <small>kg</small></strong></article>
-        {running && <article className="progress-stat"><span>PROGRESS</span><strong>{checkedSets.length}/{totalSets}</strong></article>}
       </div>
 
       <div className="exercise-heading"><div><p className="eyebrow">ROUTINE PLAN</p><h2>Exercises</h2></div><button onClick={onEdit}><Pencil size={15} /> Edit routine</button></div>
@@ -476,15 +446,12 @@ function RoutineDetail({ routine, onBack, onEdit, onDelete, onToast }: { routine
               <MoreHorizontal size={20} />
             </div>
             <div className="sets-table">
-              <div className="set-row set-header"><span>SET</span><span>KG</span><span>REPS</span>{running && <span>DONE</span>}</div>
-              {exercise.gym_exercise_sets.map((set) => {
-                const complete = checkedSets.includes(set.id);
-                return (
-                  <button className={`set-row ${complete ? 'complete' : ''}`} key={set.id} onClick={() => toggleSet(set.id)} disabled={!running}>
-                    <span>{set.set_number}</span><span>{set.weight_kg}</span><span>{set.reps}</span>{running && <span className="set-check">{complete && <Check size={14} />}</span>}
-                  </button>
-                );
-              })}
+              <div className="set-row set-header"><span>SET</span><span>KG</span><span>REPS</span></div>
+              {exercise.gym_exercise_sets.map((set) => (
+                <div className="set-row" key={set.id}>
+                  <span>{set.set_number}</span><span>{set.weight_kg}</span><span>{set.reps}</span>
+                </div>
+              ))}
             </div>
           </article>
         ))}
