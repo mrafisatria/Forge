@@ -38,6 +38,8 @@ supabase functions deploy forge-api --project-ref mriotylczlxaxydhorga --no-veri
 
 Atau buat Edge Function bernama **forge-api** di dashboard, masukkan **index.ts**, **handler.ts**, **validation.ts**, dan **deno.json**, lalu deploy. Verifikasi JWT bawaan dimatikan **hanya untuk forge-api** karena fungsi ini memeriksa token sesi Forge sendiri. Jangan mengubah dompetku-api.
 
+Untuk editor dashboard yang lebih praktis, jalankan **npm run bundle:edge**. Salin hasil **outputs/forge-api/index.ts** menjadi berkas utama **index.ts** di editor. Bundle ini dibuat dari source yang sama dan tidak memuat secret akun atau key server.
+
 Server menggunakan SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY/SUPABASE_SECRET_KEYS bawaan Edge Functions. Jangan menyalin key server ke frontend.
 
 Tabel baru: forge_accounts, forge_sessions, forge_login_attempts, gym_routines, gym_exercises, gym_exercise_sets. Bucket: forge-exercise-images (privat).
@@ -72,5 +74,7 @@ npm run build
 ~~~
 
 Test lokal memakai backend tiruan: autentikasi Rafi, pembatas login, isolasi sesi/owner, logout, validasi data dan foto. Tetap periksa koneksi nyata setelah schema dan Edge Function terpasang.
+
+**scripts/check-live-api.mjs** tersedia untuk pemeriksaan koneksi nyata. Jalankan dengan environment lokal dan masukkan secret lewat stdin (jangan lewat argumen perintah yang disimpan). Skrip ini membuat satu routine sementara, memeriksa penyimpanan dan akses, kemudian menghapus routine tersebut serta mencabut sesi uji. Jangan menjalankannya sebagai pemeriksaan read-only.
 
 Foto yang diganti/dihapus dari routine tidak otomatis dihapus dari Storage untuk menghindari kehilangan foto saat ada kegagalan penyimpanan; bersihkan file yatim lewat administrasi bila diperlukan.
