@@ -28,6 +28,11 @@ import type { DraftExercise, DraftSet, Exercise, Routine, RoutineDraft } from '@
 
 const uid = () => crypto.randomUUID();
 
+function parseWeight(value: string) {
+  const parsed = Number.parseFloat(value.trim().replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 const demoRoutines: Routine[] = [
   {
     id: 'demo-upper',
@@ -300,7 +305,7 @@ export default function WorkoutApp() {
             name: exercise.name.trim(),
             image_url: await uploadImage(exercise, routineId),
             sort_order: index,
-            sets: exercise.sets.map((set, setIndex) => ({ set_number: setIndex + 1, weight_kg: Number(set.weightKg) || 0, reps: Number(set.reps) || 0 })),
+            sets: exercise.sets.map((set, setIndex) => ({ set_number: setIndex + 1, weight_kg: parseWeight(set.weightKg), reps: Number(set.reps) || 0 })),
           })),
         );
 
@@ -364,7 +369,7 @@ export default function WorkoutApp() {
         gym_exercise_sets: exerciseDraft.sets.map((set, index) => ({
           id: previousExercise?.gym_exercise_sets[index]?.id ?? uid(),
           set_number: index + 1,
-          weight_kg: Number(set.weightKg) || 0,
+          weight_kg: parseWeight(set.weightKg),
           reps: Number(set.reps) || 0,
         })),
       };
@@ -637,7 +642,7 @@ function ExerciseEditCard({ draft, index, saving, onChange, onSave, onCancel }: 
       {draft.sets.map((set, setIndex) => (
         <div className="draft-set-row" key={set.clientId}>
           <strong>{setIndex + 1}</strong>
-          <input type="number" inputMode="decimal" min="0" step="0.25" value={set.weightKg} onChange={(event) => updateSet(setIndex, { weightKg: event.target.value })} placeholder="0" aria-label={`Berat set ${setIndex + 1}`} />
+          <input type="text" inputMode="decimal" pattern="[0-9]+([,.][0-9]+)?" value={set.weightKg} onChange={(event) => updateSet(setIndex, { weightKg: event.target.value })} placeholder="0 atau 2,5" aria-label={`Berat set ${setIndex + 1}`} />
           <input type="number" inputMode="numeric" min="0" step="1" value={set.reps} onChange={(event) => updateSet(setIndex, { reps: event.target.value })} placeholder="10" aria-label={`Repetisi set ${setIndex + 1}`} />
           <button type="button" onClick={() => onChange({ ...draft, sets: draft.sets.filter((_, currentIndex) => currentIndex !== setIndex) })} aria-label={`Hapus set ${setIndex + 1}`}><X size={15} /></button>
         </div>
@@ -694,7 +699,7 @@ function RoutineEditor({ draft, setDraft, saving, onClose, onSave }: { draft: Ro
                   {exercise.sets.map((set, setIndex) => (
                     <div className="draft-set-row" key={set.clientId}>
                       <strong>{setIndex + 1}</strong>
-                      <input type="number" inputMode="decimal" min="0" step="0.25" value={set.weightKg} onChange={(event) => updateSet(exerciseIndex, setIndex, { weightKg: event.target.value })} placeholder="0" aria-label={`Berat set ${setIndex + 1}`} />
+                      <input type="text" inputMode="decimal" pattern="[0-9]+([,.][0-9]+)?" value={set.weightKg} onChange={(event) => updateSet(exerciseIndex, setIndex, { weightKg: event.target.value })} placeholder="0 atau 2,5" aria-label={`Berat set ${setIndex + 1}`} />
                       <input type="number" inputMode="numeric" min="0" step="1" value={set.reps} onChange={(event) => updateSet(exerciseIndex, setIndex, { reps: event.target.value })} placeholder="10" aria-label={`Repetisi set ${setIndex + 1}`} />
                       <button type="button" onClick={() => updateExercise(exerciseIndex, { sets: exercise.sets.filter((_, index) => index !== setIndex) })} aria-label={`Hapus set ${setIndex + 1}`}><X size={15} /></button>
                     </div>
