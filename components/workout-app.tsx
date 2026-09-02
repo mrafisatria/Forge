@@ -118,7 +118,7 @@ function newExercise(): DraftExercise {
 }
 
 function emptyDraft(): RoutineDraft {
-  return { id: null, name: '', trainingDay: '', note: '', exercises: [newExercise()] };
+  return { id: null, name: '', trainingDay: '', note: '', exercises: [] };
 }
 
 function draftFromRoutine(routine: Routine): RoutineDraft {
@@ -486,6 +486,12 @@ function RoutineEditor({ draft, setDraft, saving, onClose, onSave }: { draft: Ro
           <div className="editor-section-title"><div><span>EXERCISES</span><strong>{draft.exercises.length} gerakan</strong></div><button type="button" onClick={() => setDraft({ ...draft, exercises: [...draft.exercises, newExercise()] })}><Plus size={16} /> Add exercise</button></div>
 
           <div className="draft-exercises">
+            {!draft.exercises.length && (
+              <div className="editor-empty">
+                <Dumbbell size={21} />
+                <div><strong>Belum ada exercise</strong><span>Tekan Add exercise untuk menambahkan gerakan pertama.</span></div>
+              </div>
+            )}
             {draft.exercises.map((exercise, exerciseIndex) => (
               <article className="draft-exercise" key={exercise.clientId}>
                 <div className="draft-exercise-top">
