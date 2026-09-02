@@ -393,12 +393,6 @@ function RoutineOverview({ routines, loading, onCreate, onOpen }: { routines: Ro
 
   return (
     <>
-      <section className="hero-card">
-        <div className="hero-copy"><span className="hero-kicker">QUICK START</span><h2>Mulai workout baru</h2><p>Pilih routine favoritmu atau susun program latihan dari awal.</p></div>
-        <div className="hero-visual" aria-hidden="true"><span>01</span><Dumbbell size={54} strokeWidth={1.35} /></div>
-        <button onClick={onCreate}><Plus size={19} /> Buat workout kosong</button>
-      </section>
-
       <section className="metrics-row">
         <article><span>ROUTINES</span><strong>{String(routines.length).padStart(2, '0')}</strong><small>program aktif</small></article>
         <article><span>EXERCISES</span><strong>{String(exerciseCount).padStart(2, '0')}</strong><small>gerakan tersimpan</small></article>
