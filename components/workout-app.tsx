@@ -24,7 +24,7 @@ import {
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
-import type { DraftExercise, DraftSet, Routine, RoutineDraft } from '@/lib/types';
+import type { DraftExercise, DraftSet, Exercise, Routine, RoutineDraft } from '@/lib/types';
 
 const uid = () => crypto.randomUUID();
 
@@ -156,6 +156,32 @@ function normalizeRoutine(routine: Routine): Routine {
   };
 }
 
+function exerciseToDraft(exercise: Exercise): DraftExercise {
+  return {
+    clientId: exercise.id,
+    name: exercise.name,
+    imageUrl: exercise.image_url,
+    imageFile: null,
+    sets: exercise.gym_exercise_sets
+      .slice()
+      .sort((a, b) => a.set_number - b.set_number)
+      .map((set) => ({ clientId: set.id, weightKg: String(set.weight_kg), reps: String(set.reps) })),
+  };
+}
+
+function exercisesForRpc(exercises: Exercise[]) {
+  return exercises.map((exercise, index) => ({
+    name: exercise.name,
+    image_url: exercise.image_url,
+    sort_order: index,
+    sets: exercise.gym_exercise_sets.map((set, setIndex) => ({
+      set_number: setIndex + 1,
+      weight_kg: set.weight_kg,
+      reps: set.reps,
+    })),
+  }));
+}
+
 function initials(email?: string) {
   if (!email) return 'MR';
   return email.slice(0, 2).toUpperCase();
@@ -246,53 +272,65 @@ export default function WorkoutApp() {
   async function saveRoutine(event: FormEvent) {
     event.preventDefault();
     if (!draft || !draft.name.trim()) return showToast('Nama routine wajib diisi.');
-    if (!draft.exercises.length || draft.exercises.some((exercise) => !exercise.name.trim())) {
-      return showToast('Tambahkan minimal satu exercise dan isi namanya.');
-    }
+    if (draft.exercises.some((exercise) => !exercise.name.trim())) return showToast('Isi nama setiap exercise yang ditambahkan.');
 
     setSaving(true);
     try {
       const routineId = draft.id ?? uid();
-      const exercisePayload = await Promise.all(
-        draft.exercises.map(async (exercise, index) => ({
-          name: exercise.name.trim(),
-          image_url: await uploadImage(exercise, routineId),
-          sort_order: index,
-          sets: exercise.sets.map((set, setIndex) => ({
-            set_number: setIndex + 1,
-            weight_kg: Number(set.weightKg) || 0,
-            reps: Number(set.reps) || 0,
-          })),
-        })),
-      );
-
       const supabase = getSupabase();
-      if (supabase && user) {
-        const { error } = await supabase.rpc('save_gym_routine', {
-          p_routine_id: routineId,
-          p_name: draft.name.trim(),
-          p_training_day: draft.trainingDay.trim() || null,
-          p_note: draft.note.trim() || null,
-          p_exercises: exercisePayload,
-        });
-        if (error) throw error;
-        await loadRoutines();
+      if (draft.id) {
+        if (supabase && user) {
+          const { error } = await supabase
+            .from('gym_routines')
+            .update({ name: draft.name.trim(), training_day: draft.trainingDay.trim() || null, note: draft.note.trim() || null })
+            .eq('id', draft.id);
+          if (error) throw error;
+          await loadRoutines();
+        } else {
+          setRoutines((current) => current.map((routine) => routine.id === draft.id ? {
+            ...routine,
+            name: draft.name.trim(),
+            training_day: draft.trainingDay.trim() || null,
+            note: draft.note.trim() || null,
+          } : routine));
+        }
       } else {
-        const localRoutine: Routine = {
-          id: routineId,
-          name: draft.name.trim(),
-          training_day: draft.trainingDay.trim() || null,
-          note: draft.note.trim() || null,
-          created_at: draft.id ? routines.find((item) => item.id === draft.id)?.created_at ?? new Date().toISOString() : new Date().toISOString(),
-          gym_exercises: exercisePayload.map((exercise, index) => ({
-            id: uid(),
-            name: exercise.name,
-            image_url: exercise.image_url,
+        const exercisePayload = await Promise.all(
+          draft.exercises.map(async (exercise, index) => ({
+            name: exercise.name.trim(),
+            image_url: await uploadImage(exercise, routineId),
             sort_order: index,
-            gym_exercise_sets: exercise.sets.map((set) => ({ id: uid(), ...set })),
+            sets: exercise.sets.map((set, setIndex) => ({ set_number: setIndex + 1, weight_kg: Number(set.weightKg) || 0, reps: Number(set.reps) || 0 })),
           })),
-        };
-        setRoutines((current) => [localRoutine, ...current.filter((item) => item.id !== draft.id)]);
+        );
+
+        if (supabase && user) {
+          const { error } = await supabase.rpc('save_gym_routine', {
+            p_routine_id: routineId,
+            p_name: draft.name.trim(),
+            p_training_day: draft.trainingDay.trim() || null,
+            p_note: draft.note.trim() || null,
+            p_exercises: exercisePayload,
+          });
+          if (error) throw error;
+          await loadRoutines();
+        } else {
+          const localRoutine: Routine = {
+            id: routineId,
+            name: draft.name.trim(),
+            training_day: draft.trainingDay.trim() || null,
+            note: draft.note.trim() || null,
+            created_at: new Date().toISOString(),
+            gym_exercises: exercisePayload.map((exercise, index) => ({
+              id: uid(),
+              name: exercise.name,
+              image_url: exercise.image_url,
+              sort_order: index,
+              gym_exercise_sets: exercise.sets.map((set) => ({ id: uid(), ...set })),
+            })),
+          };
+          setRoutines((current) => [localRoutine, ...current]);
+        }
       }
 
       setEditorOpen(false);
@@ -302,6 +340,84 @@ export default function WorkoutApp() {
       showToast(error instanceof Error ? error.message : 'Routine gagal disimpan.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveExercise(routine: Routine, exerciseDraft: DraftExercise, exerciseId: string | null) {
+    if (!exerciseDraft.name.trim()) {
+      showToast('Nama exercise wajib diisi.');
+      return false;
+    }
+    if (!exerciseDraft.sets.length) {
+      showToast('Tambahkan minimal satu set.');
+      return false;
+    }
+
+    try {
+      const imageUrl = await uploadImage(exerciseDraft, routine.id);
+      const previousExercise = exerciseId ? routine.gym_exercises.find((exercise) => exercise.id === exerciseId) : null;
+      const nextExercise: Exercise = {
+        id: exerciseId ?? uid(),
+        name: exerciseDraft.name.trim(),
+        image_url: imageUrl,
+        sort_order: previousExercise?.sort_order ?? routine.gym_exercises.length,
+        gym_exercise_sets: exerciseDraft.sets.map((set, index) => ({
+          id: previousExercise?.gym_exercise_sets[index]?.id ?? uid(),
+          set_number: index + 1,
+          weight_kg: Number(set.weightKg) || 0,
+          reps: Number(set.reps) || 0,
+        })),
+      };
+      const nextExercises = exerciseId
+        ? routine.gym_exercises.map((exercise) => exercise.id === exerciseId ? nextExercise : exercise)
+        : [...routine.gym_exercises, nextExercise];
+
+      const supabase = getSupabase();
+      if (supabase && user) {
+        const { error } = await supabase.rpc('save_gym_routine', {
+          p_routine_id: routine.id,
+          p_name: routine.name,
+          p_training_day: routine.training_day,
+          p_note: routine.note,
+          p_exercises: exercisesForRpc(nextExercises),
+        });
+        if (error) throw error;
+        await loadRoutines();
+      } else {
+        setRoutines((current) => current.map((item) => item.id === routine.id ? { ...item, gym_exercises: nextExercises } : item));
+      }
+
+      showToast(exerciseId ? 'Exercise berhasil diperbarui.' : 'Exercise baru berhasil ditambahkan.');
+      return true;
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Exercise gagal disimpan.');
+      return false;
+    }
+  }
+
+  async function deleteExercise(routine: Routine, exercise: Exercise) {
+    if (!window.confirm(`Hapus exercise “${exercise.name}”?`)) return false;
+    try {
+      const nextExercises = routine.gym_exercises.filter((item) => item.id !== exercise.id);
+      const supabase = getSupabase();
+      if (supabase && user) {
+        const { error } = await supabase.rpc('save_gym_routine', {
+          p_routine_id: routine.id,
+          p_name: routine.name,
+          p_training_day: routine.training_day,
+          p_note: routine.note,
+          p_exercises: exercisesForRpc(nextExercises),
+        });
+        if (error) throw error;
+        await loadRoutines();
+      } else {
+        setRoutines((current) => current.map((item) => item.id === routine.id ? { ...item, gym_exercises: nextExercises } : item));
+      }
+      showToast('Exercise telah dihapus.');
+      return true;
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Exercise gagal dihapus.');
+      return false;
     }
   }
 
@@ -342,7 +458,7 @@ export default function WorkoutApp() {
         </header>
 
         {selectedRoutine ? (
-          <RoutineDetail routine={selectedRoutine} onBack={() => setSelectedId(null)} onEdit={() => openEditRoutine(selectedRoutine)} onDelete={() => deleteRoutine(selectedRoutine)} />
+          <RoutineDetail routine={selectedRoutine} onBack={() => setSelectedId(null)} onEditInfo={() => openEditRoutine(selectedRoutine)} onDelete={() => deleteRoutine(selectedRoutine)} onSaveExercise={saveExercise} onDeleteExercise={deleteExercise} />
         ) : (
           <RoutineOverview routines={routines} loading={loading} onCreate={openNewRoutine} onOpen={setSelectedId} />
         )}
@@ -416,15 +532,45 @@ function RoutineOverview({ routines, loading, onCreate, onOpen }: { routines: Ro
   );
 }
 
-function RoutineDetail({ routine, onBack, onEdit, onDelete }: { routine: Routine; onBack: () => void; onEdit: () => void; onDelete: () => void }) {
+function RoutineDetail({
+  routine,
+  onBack,
+  onEditInfo,
+  onDelete,
+  onSaveExercise,
+  onDeleteExercise,
+}: {
+  routine: Routine;
+  onBack: () => void;
+  onEditInfo: () => void;
+  onDelete: () => void;
+  onSaveExercise: (routine: Routine, draft: DraftExercise, exerciseId: string | null) => Promise<boolean>;
+  onDeleteExercise: (routine: Routine, exercise: Exercise) => Promise<boolean>;
+}) {
+  const [menuExerciseId, setMenuExerciseId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ exerciseId: string | null; draft: DraftExercise } | null>(null);
+  const [savingExercise, setSavingExercise] = useState(false);
   const totalSets = routine.gym_exercises.reduce((sum, exercise) => sum + exercise.gym_exercise_sets.length, 0);
   const totalVolume = routine.gym_exercises.reduce((sum, exercise) => sum + exercise.gym_exercise_sets.reduce((sub, set) => sub + set.weight_kg * set.reps, 0), 0);
+
+  async function commitExercise() {
+    if (!editing) return;
+    setSavingExercise(true);
+    const saved = await onSaveExercise(routine, editing.draft, editing.exerciseId);
+    setSavingExercise(false);
+    if (saved) setEditing(null);
+  }
+
+  async function removeExercise(exercise: Exercise) {
+    setMenuExerciseId(null);
+    await onDeleteExercise(routine, exercise);
+  }
 
   return (
     <section className="detail-view">
       <div className="detail-actions">
         <button className="back-button" onClick={onBack}><ArrowLeft size={18} /> Semua routine</button>
-        <div><button className="icon-action" onClick={onEdit} aria-label="Edit routine"><Pencil size={17} /></button><button className="icon-action danger" onClick={onDelete} aria-label="Hapus routine"><Trash2 size={17} /></button></div>
+        <div><button className="icon-action" onClick={onEditInfo} aria-label="Edit deskripsi routine"><Pencil size={17} /></button><button className="icon-action danger" onClick={onDelete} aria-label="Hapus routine"><Trash2 size={17} /></button></div>
       </div>
 
       <div className="detail-stats">
@@ -433,17 +579,27 @@ function RoutineDetail({ routine, onBack, onEdit, onDelete }: { routine: Routine
         <article><span>EST. VOLUME</span><strong>{totalVolume.toLocaleString('id-ID')} <small>kg</small></strong></article>
       </div>
 
-      <div className="exercise-heading"><div><p className="eyebrow">ROUTINE PLAN</p><h2>Exercises</h2></div><button onClick={onEdit}><Pencil size={15} /> Edit routine</button></div>
+      <div className="exercise-heading"><div><p className="eyebrow">ROUTINE PLAN</p><h2>Exercises</h2></div><button onClick={() => { setEditing({ exerciseId: null, draft: newExercise() }); setMenuExerciseId(null); }} disabled={Boolean(editing)}><Plus size={15} /> Add exercise</button></div>
 
       <div className="exercise-list">
-        {routine.gym_exercises.map((exercise, index) => (
+        {routine.gym_exercises.map((exercise, index) => editing?.exerciseId === exercise.id ? (
+          <ExerciseEditCard key={exercise.id} draft={editing.draft} index={index} saving={savingExercise} onChange={(draft) => setEditing({ exerciseId: exercise.id, draft })} onSave={commitExercise} onCancel={() => setEditing(null)} />
+        ) : (
           <article className="exercise-card" key={exercise.id}>
             <div className="exercise-title">
               <div className="exercise-image">
                 {exercise.image_url ? <img src={exercise.image_url} alt={exercise.name} /> : <Dumbbell size={24} />}
               </div>
               <div><span>EXERCISE {String(index + 1).padStart(2, '0')}</span><h3>{exercise.name}</h3></div>
-              <MoreHorizontal size={20} />
+              <div className="exercise-menu-wrap">
+                <button className="exercise-menu-trigger" onClick={() => setMenuExerciseId((current) => current === exercise.id ? null : exercise.id)} aria-label={`Menu ${exercise.name}`} aria-expanded={menuExerciseId === exercise.id}><MoreHorizontal size={20} /></button>
+                {menuExerciseId === exercise.id && (
+                  <div className="exercise-menu">
+                    <button onClick={() => { setEditing({ exerciseId: exercise.id, draft: exerciseToDraft(exercise) }); setMenuExerciseId(null); }}><Pencil size={14} /> Edit</button>
+                    <button className="danger" onClick={() => removeExercise(exercise)}><Trash2 size={14} /> Hapus</button>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="sets-table">
               <div className="set-row set-header"><span>SET</span><span>KG</span><span>REPS</span></div>
@@ -455,9 +611,40 @@ function RoutineDetail({ routine, onBack, onEdit, onDelete }: { routine: Routine
             </div>
           </article>
         ))}
-        {!routine.gym_exercises.length && <div className="empty-state"><Dumbbell size={28} /><h3>Belum ada exercise</h3><p>Edit routine untuk menambahkan gerakan.</p></div>}
+        {editing?.exerciseId === null && <ExerciseEditCard draft={editing.draft} index={routine.gym_exercises.length} saving={savingExercise} onChange={(draft) => setEditing({ exerciseId: null, draft })} onSave={commitExercise} onCancel={() => setEditing(null)} />}
+        {!routine.gym_exercises.length && !editing && <div className="empty-state"><Dumbbell size={28} /><h3>Belum ada exercise</h3><p>Tekan Add exercise untuk menambahkan gerakan pertama.</p></div>}
       </div>
     </section>
+  );
+}
+
+function ExerciseEditCard({ draft, index, saving, onChange, onSave, onCancel }: { draft: DraftExercise; index: number; saving: boolean; onChange: (draft: DraftExercise) => void; onSave: () => void; onCancel: () => void }) {
+  function updateSet(setIndex: number, changes: Partial<DraftSet>) {
+    onChange({ ...draft, sets: draft.sets.map((set, currentIndex) => currentIndex === setIndex ? { ...set, ...changes } : set) });
+  }
+
+  return (
+    <article className="exercise-card exercise-edit-card">
+      <div className="inline-editor-label"><span>{draft.clientId && draft.name ? 'EDIT EXERCISE' : 'NEW EXERCISE'}</span><strong>Exercise {String(index + 1).padStart(2, '0')}</strong></div>
+      <div className="draft-exercise-top">
+        <label className="image-picker">
+          {draft.imageFile ? <img src={URL.createObjectURL(draft.imageFile)} alt="Preview exercise" /> : draft.imageUrl ? <img src={draft.imageUrl} alt="Preview exercise" /> : <><ImagePlus size={22} /><small>Add photo</small></>}
+          <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => onChange({ ...draft, imageFile: event.target.files?.[0] ?? null })} />
+        </label>
+        <label className="field exercise-name"><span>Nama exercise</span><input value={draft.name} onChange={(event) => onChange({ ...draft, name: event.target.value })} placeholder="Nama gerakan" autoFocus /></label>
+      </div>
+      <div className="draft-set-header"><span>SET</span><span>KG</span><span>REPS</span><span /></div>
+      {draft.sets.map((set, setIndex) => (
+        <div className="draft-set-row" key={set.clientId}>
+          <strong>{setIndex + 1}</strong>
+          <input type="number" inputMode="decimal" min="0" step="0.25" value={set.weightKg} onChange={(event) => updateSet(setIndex, { weightKg: event.target.value })} placeholder="0" aria-label={`Berat set ${setIndex + 1}`} />
+          <input type="number" inputMode="numeric" min="0" step="1" value={set.reps} onChange={(event) => updateSet(setIndex, { reps: event.target.value })} placeholder="10" aria-label={`Repetisi set ${setIndex + 1}`} />
+          <button type="button" onClick={() => onChange({ ...draft, sets: draft.sets.filter((_, currentIndex) => currentIndex !== setIndex) })} aria-label={`Hapus set ${setIndex + 1}`}><X size={15} /></button>
+        </div>
+      ))}
+      <button type="button" className="add-set" onClick={() => onChange({ ...draft, sets: [...draft.sets, newSet(draft.sets.length)] })}><Plus size={15} /> Add set</button>
+      <div className="inline-editor-actions"><button type="button" className="secondary-button" onClick={onCancel}>Cancel</button><button type="button" className="primary-button" onClick={onSave} disabled={saving}>{saving ? <LoaderCircle className="spin" size={16} /> : <Check size={16} />}{saving ? 'Menyimpan...' : 'Save exercise'}</button></div>
+    </article>
   );
 }
 
@@ -475,7 +662,7 @@ function RoutineEditor({ draft, setDraft, saving, onClose, onSave }: { draft: Ro
     <div className="modal-shell" role="dialog" aria-modal="true" aria-label={draft.id ? 'Edit routine' : 'Routine baru'}>
       <button className="modal-backdrop" onClick={onClose} aria-label="Tutup" />
       <form className="editor" onSubmit={onSave}>
-        <header><div><p className="eyebrow">ROUTINE BUILDER</p><h2>{draft.id ? 'Edit routine' : 'Routine baru'}</h2></div><button type="button" className="close-button" onClick={onClose}><X size={20} /></button></header>
+        <header><div><p className="eyebrow">{draft.id ? 'ROUTINE DETAILS' : 'ROUTINE BUILDER'}</p><h2>{draft.id ? 'Edit deskripsi routine' : 'Routine baru'}</h2></div><button type="button" className="close-button" onClick={onClose}><X size={20} /></button></header>
         <div className="editor-body">
           <div className="form-grid">
             <label className="field wide"><span>Nama routine</span><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Contoh: Chest + Back" autoFocus /></label>
@@ -483,38 +670,40 @@ function RoutineEditor({ draft, setDraft, saving, onClose, onSave }: { draft: Ro
             <label className="field"><span>Catatan</span><input value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="Target atau fokus latihan" /></label>
           </div>
 
-          <div className="editor-section-title"><div><span>EXERCISES</span><strong>{draft.exercises.length} gerakan</strong></div><button type="button" onClick={() => setDraft({ ...draft, exercises: [...draft.exercises, newExercise()] })}><Plus size={16} /> Add exercise</button></div>
+          {!draft.id && <>
+            <div className="editor-section-title"><div><span>EXERCISES</span><strong>{draft.exercises.length} gerakan</strong></div><button type="button" onClick={() => setDraft({ ...draft, exercises: [...draft.exercises, newExercise()] })}><Plus size={16} /> Add exercise</button></div>
 
-          <div className="draft-exercises">
-            {!draft.exercises.length && (
-              <div className="editor-empty">
-                <Dumbbell size={21} />
-                <div><strong>Belum ada exercise</strong><span>Tekan Add exercise untuk menambahkan gerakan pertama.</span></div>
-              </div>
-            )}
-            {draft.exercises.map((exercise, exerciseIndex) => (
-              <article className="draft-exercise" key={exercise.clientId}>
-                <div className="draft-exercise-top">
-                  <label className="image-picker">
-                    {exercise.imageFile ? <img src={URL.createObjectURL(exercise.imageFile)} alt="Preview exercise" /> : exercise.imageUrl ? <img src={exercise.imageUrl} alt="Preview exercise" /> : <><ImagePlus size={22} /><small>Add photo</small></>}
-                    <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => updateExercise(exerciseIndex, { imageFile: event.target.files?.[0] ?? null })} />
-                  </label>
-                  <label className="field exercise-name"><span>Exercise {String(exerciseIndex + 1).padStart(2, '0')}</span><input value={exercise.name} onChange={(event) => updateExercise(exerciseIndex, { name: event.target.value })} placeholder="Nama gerakan" /></label>
-                  <button type="button" className="remove-exercise" onClick={() => setDraft({ ...draft, exercises: draft.exercises.filter((_, index) => index !== exerciseIndex) })} aria-label="Hapus exercise"><Trash2 size={17} /></button>
+            <div className="draft-exercises">
+              {!draft.exercises.length && (
+                <div className="editor-empty">
+                  <Dumbbell size={21} />
+                  <div><strong>Belum ada exercise</strong><span>Tekan Add exercise untuk menambahkan gerakan pertama.</span></div>
                 </div>
-                <div className="draft-set-header"><span>SET</span><span>KG</span><span>REPS</span><span /> </div>
-                {exercise.sets.map((set, setIndex) => (
-                  <div className="draft-set-row" key={set.clientId}>
-                    <strong>{setIndex + 1}</strong>
-                    <input type="number" inputMode="decimal" min="0" step="0.25" value={set.weightKg} onChange={(event) => updateSet(exerciseIndex, setIndex, { weightKg: event.target.value })} placeholder="0" aria-label={`Berat set ${setIndex + 1}`} />
-                    <input type="number" inputMode="numeric" min="0" step="1" value={set.reps} onChange={(event) => updateSet(exerciseIndex, setIndex, { reps: event.target.value })} placeholder="10" aria-label={`Repetisi set ${setIndex + 1}`} />
-                    <button type="button" onClick={() => updateExercise(exerciseIndex, { sets: exercise.sets.filter((_, index) => index !== setIndex) })} aria-label={`Hapus set ${setIndex + 1}`}><X size={15} /></button>
+              )}
+              {draft.exercises.map((exercise, exerciseIndex) => (
+                <article className="draft-exercise" key={exercise.clientId}>
+                  <div className="draft-exercise-top">
+                    <label className="image-picker">
+                      {exercise.imageFile ? <img src={URL.createObjectURL(exercise.imageFile)} alt="Preview exercise" /> : exercise.imageUrl ? <img src={exercise.imageUrl} alt="Preview exercise" /> : <><ImagePlus size={22} /><small>Add photo</small></>}
+                      <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => updateExercise(exerciseIndex, { imageFile: event.target.files?.[0] ?? null })} />
+                    </label>
+                    <label className="field exercise-name"><span>Exercise {String(exerciseIndex + 1).padStart(2, '0')}</span><input value={exercise.name} onChange={(event) => updateExercise(exerciseIndex, { name: event.target.value })} placeholder="Nama gerakan" /></label>
+                    <button type="button" className="remove-exercise" onClick={() => setDraft({ ...draft, exercises: draft.exercises.filter((_, index) => index !== exerciseIndex) })} aria-label="Hapus exercise"><Trash2 size={17} /></button>
                   </div>
-                ))}
-                <button type="button" className="add-set" onClick={() => updateExercise(exerciseIndex, { sets: [...exercise.sets, newSet(exercise.sets.length)] })}><Plus size={15} /> Add set</button>
-              </article>
-            ))}
-          </div>
+                  <div className="draft-set-header"><span>SET</span><span>KG</span><span>REPS</span><span /> </div>
+                  {exercise.sets.map((set, setIndex) => (
+                    <div className="draft-set-row" key={set.clientId}>
+                      <strong>{setIndex + 1}</strong>
+                      <input type="number" inputMode="decimal" min="0" step="0.25" value={set.weightKg} onChange={(event) => updateSet(exerciseIndex, setIndex, { weightKg: event.target.value })} placeholder="0" aria-label={`Berat set ${setIndex + 1}`} />
+                      <input type="number" inputMode="numeric" min="0" step="1" value={set.reps} onChange={(event) => updateSet(exerciseIndex, setIndex, { reps: event.target.value })} placeholder="10" aria-label={`Repetisi set ${setIndex + 1}`} />
+                      <button type="button" onClick={() => updateExercise(exerciseIndex, { sets: exercise.sets.filter((_, index) => index !== setIndex) })} aria-label={`Hapus set ${setIndex + 1}`}><X size={15} /></button>
+                    </div>
+                  ))}
+                  <button type="button" className="add-set" onClick={() => updateExercise(exerciseIndex, { sets: [...exercise.sets, newSet(exercise.sets.length)] })}><Plus size={15} /> Add set</button>
+                </article>
+              ))}
+            </div>
+          </>}
         </div>
         <footer><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button type="submit" className="primary-button" disabled={saving}>{saving ? <LoaderCircle className="spin" size={17} /> : <Check size={17} />}{saving ? 'Menyimpan...' : 'Save routine'}</button></footer>
       </form>

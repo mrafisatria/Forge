@@ -9,7 +9,7 @@ Forge adalah gym tracker responsif untuk membuat routine, menambahkan exercise b
 - Beberapa exercise di dalam satu routine.
 - Foto exercise dengan upload maksimal 5 MB (JPEG, PNG, atau WebP).
 - Set dinamis dengan nilai kg dan reps.
-- Mode workout sederhana untuk mencentang set yang selesai.
+- Menambah exercise secara terpisah serta mengedit nama, gambar, kg, reps, dan set langsung dari kartu exercise.
 - Tampilan responsif untuk desktop dan ponsel.
 - Data setiap pengguna dipisahkan dengan Row Level Security.
 
