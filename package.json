@@ -12,7 +12,8 @@
     "lint": "eslint . --ignore-pattern .next",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "typecheck:api": "tsc --project supabase/tsconfig.json",
-    "bundle:edge": "node scripts/bundle-edge.mjs"
+    "bundle:edge": "node scripts/bundle-edge.mjs",
+    "generate:icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
@@ -30,6 +31,7 @@
     "esbuild": "^0.28.2",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",
+    "sharp": "0.35.4",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3"
   },

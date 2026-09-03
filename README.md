@@ -64,6 +64,10 @@ npm run dev
 
 Di Vercel, import repository Forge sebagai Next.js, tambahkan kedua variable di **Project Settings → Environment Variables**, lalu redeploy. Env lokal tidak otomatis dikirim ke Vercel. Frontend Vercel dan Edge Function Supabase adalah dua deployment terpisah.
 
+## Logo dan favicon
+
+Logo utama ada di **public/favicon.svg**. Jalankan **npm run generate:icons** setelah mengubahnya untuk memperbarui favicon ICO (16/32/48 px), ikon iPhone (180 px), dan **public/forge-logo.png** (512 px) untuk avatar project Vercel. File hasilnya ikut disimpan di Git. Next.js memasang favicon ICO secara otomatis; metadata memasang versi SVG dan Apple icon.
+
 ## Pemeriksaan
 
 ~~~sh
