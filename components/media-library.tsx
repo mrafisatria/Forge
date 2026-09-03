@@ -21,19 +21,20 @@ export function MediaProvider({ token, onError, children }: { token: string; onE
   </MediaContext.Provider>;
 }
 
-export function ExerciseMedia({ url, path, name, controls = false, autoPlay = false }: { url: string | null; path: string | null; name: string; controls?: boolean; autoPlay?: boolean }) {
+export function ExerciseMedia({ url, path, name, controls = false, autoPlay = false, onError }: { url: string | null; path: string | null; name: string; controls?: boolean; autoPlay?: boolean; onError?: () => void }) {
   const video = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     if (!autoPlay || !video.current) return;
     const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const update = () => { if (motion.matches) video.current?.pause(); else void video.current?.play().catch(() => {}); };
     update(); motion.addEventListener('change', update);
-    return () => motion.removeEventListener('change', update);
+    const element = video.current;
+    return () => { motion.removeEventListener('change', update); element?.pause(); };
   }, [autoPlay, url]);
   if (!url) return <Dumbbell size={24} />;
   return isVideoPath(path)
-    ? <video ref={video} src={url} aria-label={name} muted loop playsInline controls={controls} preload="metadata" />
-    : <img src={url} alt={name} loading="lazy" />;
+    ? <video ref={video} src={url} aria-label={name} muted loop playsInline controls={controls} preload="metadata" onError={onError} />
+    : <img src={url} alt={name} loading="lazy" onError={onError} />;
 }
 
 export function MediaChooseButton({ path, url, onSelect }: { path: string | null; url: string | null; onSelect: (asset: MediaAsset | null) => void }) {

@@ -21,7 +21,8 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 're
 import { ApiError, apiRequest, isSupabaseConfigured, readSession, rememberSession, sessionStorageKey, type ForgeSession, type RoutinesResponse } from '@/lib/api';
 import type { DraftExercise, DraftSet, Exercise, Routine, RoutineDraft } from '@/lib/types';
 import { sortRoutinesByDay, trainingDays } from '@/lib/routines';
-import { ExerciseMedia, MediaChooseButton, MediaProvider, useMediaLibrary } from './media-library';
+import { MediaChooseButton, MediaProvider, useMediaLibrary } from './media-library';
+import { ExerciseMediaButton } from './exercise-media-button';
 
 const uid = () => crypto.randomUUID();
 
@@ -469,9 +470,7 @@ function RoutineDetail({
         ) : (
           <article className="exercise-card" key={exercise.id}>
             <div className="exercise-title">
-              <div className="exercise-image">
-                <ExerciseMedia url={exercise.image_url} path={exercise.image_path} name={exercise.name} autoPlay />
-              </div>
+              <ExerciseMediaButton url={exercise.image_url} path={exercise.image_path} name={exercise.name} />
               <div><span>EXERCISE {String(index + 1).padStart(2, '0')}</span><h3>{exercise.name}</h3></div>
               <div className="exercise-menu-wrap">
                 <button className="exercise-menu-trigger" onClick={() => setMenuExerciseId((current) => current === exercise.id ? null : exercise.id)} aria-label={`Menu ${exercise.name}`} aria-expanded={menuExerciseId === exercise.id}><MoreHorizontal size={20} /></button>

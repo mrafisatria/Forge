@@ -19,6 +19,8 @@ Buat routine kosong, edit nama/hari/catatan melalui tombol pensil, tambah exerci
 
 Daftar routine otomatis diurutkan Senin sampai Minggu. Routine tanpa hari atau dengan hari kustom lama berada paling bawah; urutan antar-routine pada hari yang sama tetap dipertahankan.
 
+Tekan gambar atau video pada exercise untuk melihatnya lebih besar dalam popup. Tutup melalui tombol ×, area di luar popup, atau Esc. Video memiliki kontrol putar dan tetap mengikuti preferensi pengurangan gerakan perangkat.
+
 ## Setup Supabase
 
 1. Jalankan **supabase/schema.sql** di SQL Editor proyek tujuan. Skrip ini untuk instalasi Forge baru, bukan migrasi dari versi Supabase Auth lama. Tidak mengubah tabel Dompetku.

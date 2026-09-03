@@ -29,6 +29,16 @@ h1, h2, h3, p { margin-top: 0; }
 .media-picker-button { position: relative; padding: 0; font: inherit; }
 .media-change-label { position: absolute; inset: auto 0 0; padding: 3px; color: #fff; background: #000b; font-size: 9px; }
 .exercise-image video, .image-picker video { width: 100%; height: 100%; object-fit: cover; }
+.exercise-media-trigger { border: 0; padding: 0; cursor: zoom-in; }
+.exercise-media-trigger:hover { box-shadow: 0 0 0 2px var(--lime); }
+.media-dialog.exercise-media-dialog { width: min(920px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); overscroll-behavior: contain; }
+.exercise-media-dialog-content { min-height: 0; overflow-y: auto; }
+.exercise-media-dialog-content > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px; }
+.exercise-media-dialog .exercise-media-dialog-content h2 { min-width: 0; font-size: 18px; overflow-wrap: anywhere; }
+.exercise-media-dialog .close-button { min-width: 44px; min-height: 44px; flex-shrink: 0; }
+.exercise-media-stage { display: grid; place-items: center; min-height: 160px; padding: 12px; background: #050606; }
+.exercise-media-stage img, .exercise-media-stage video { display: block; width: 100%; height: auto; max-height: calc(100dvh - 150px); object-fit: contain; }
+.exercise-media-stage p { padding: 24px; margin: 0; color: var(--muted); text-align: center; }
 .media-dialog { width: min(880px, calc(100vw - 28px)); max-height: 90dvh; padding: 0; margin: auto; color: var(--white); background: #0d100f; border: 1px solid var(--line-bright); border-radius: 20px; }
 .media-dialog[open] { display: flex; flex-direction: column; }
 .media-dialog::backdrop { background: #000c; backdrop-filter: blur(4px); }
