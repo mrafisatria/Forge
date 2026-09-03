@@ -64,6 +64,14 @@ npm run dev
 
 Di Vercel, import repository Forge sebagai Next.js, tambahkan kedua variable di **Project Settings → Environment Variables**, lalu redeploy. Env lokal tidak otomatis dikirim ke Vercel. Frontend Vercel dan Edge Function Supabase adalah dua deployment terpisah.
 
+## Galeri media exercise
+
+- Buka **Galeri media** di halaman Workout untuk upload hingga 20 file sekali pilih. Hasil setiap file ditampilkan; tombol coba ulang hanya mengunggah file yang gagal.
+- Gambar: JPEG, PNG, WebP, maksimal 5 MB per file. Video: MP4 standar, maksimal 3 detik dan 10 MB; MP4 H.264 direkomendasikan untuk kompatibilitas browser. Video tidak dipotong otomatis. Durasi diperiksa di browser dan di server dari header MP4, termasuk durasi track; fragmented MP4 tidak didukung.
+- Klik **Pilih media** saat membuat/mengedit exercise. Satu media dapat dipakai pada beberapa routine tanpa menyalin file. **Lepas media** hanya menghapus pilihan pada exercise, bukan file di galeri.
+- Upload identik dideteksi berdasarkan hash konten agar retry tidak menggandakan file. Media tetap privat di bucket `forge-exercise-images`; metadata dan pemilik ada di `forge_media`. Tautan tampilan ditandatangani selama satu jam dan diperbarui berkala.
+- Untuk database lama, jalankan **supabase/migrations/20260903_media_library.sql**, kemudian deploy ulang **forge-api** sebelum frontend. Migration mendaftarkan foto lama ke galeri tanpa memindahkan/menghapus file dan tidak mengubah data Dompetku. Instalasi baru cukup memakai schema terbaru.
+
 ## Logo dan favicon
 
 Logo utama ada di **public/favicon.svg**. Jalankan **npm run generate:icons** setelah mengubahnya untuk memperbarui favicon ICO (16/32/48 px), ikon iPhone (180 px), dan **public/forge-logo.png** (512 px) untuk avatar project Vercel. File hasilnya ikut disimpan di Git. Next.js memasang favicon ICO secara otomatis; metadata memasang versi SVG dan Apple icon.

@@ -62,6 +62,26 @@ create index if not exists gym_exercises_routine_idx on public.gym_exercises(rou
 create index if not exists gym_exercise_sets_exercise_idx on public.gym_exercise_sets(exercise_id, set_number);
 
 -- No direct access from browsers, even with a Supabase Auth session.
+create table if not exists public.forge_media (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.forge_accounts(id) on delete cascade,
+  name text not null check (char_length(name) between 1 and 180),
+  image_path text not null unique,
+  kind text not null check (kind in ('image', 'video')),
+  mime_type text not null check (mime_type in ('image/jpeg', 'image/png', 'image/webp', 'video/mp4')),
+  size_bytes bigint not null check (size_bytes between 1 and 10485760),
+  duration_seconds double precision,
+  content_hash text check (content_hash ~ '^[0-9a-f]{64}$'),
+  created_at timestamptz not null default now(),
+  unique(user_id, content_hash),
+  check ((kind = 'image' and duration_seconds is null) or (kind = 'video' and duration_seconds > 0 and duration_seconds <= 3)),
+  check (split_part(image_path, '/', 1) = user_id::text)
+);
+create index if not exists forge_media_user_created_idx on public.forge_media(user_id, created_at desc, id);
+alter table public.forge_media enable row level security;
+revoke all on public.forge_media from public, anon, authenticated;
+grant select, insert, update, delete on public.forge_media to service_role;
+
 alter table public.forge_accounts enable row level security;
 alter table public.forge_sessions enable row level security;
 alter table public.forge_login_attempts enable row level security;
@@ -151,6 +171,6 @@ grant execute on function public.write_forge_routine(uuid, uuid, boolean, text, 
 
 -- Private bucket: only the authenticated Forge server signs temporary links.
 insert into storage.buckets(id, name, public, file_size_limit, allowed_mime_types)
-values('forge-exercise-images', 'forge-exercise-images', false, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
+values('forge-exercise-images', 'forge-exercise-images', false, 10485760, array['image/jpeg', 'image/png', 'image/webp', 'video/mp4'])
 on conflict(id) do update set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
 commit;

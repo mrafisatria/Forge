@@ -1,8 +1,5 @@
 'use client';
 
-/* User-uploaded Supabase and blob preview URLs intentionally use native images. */
-/* eslint-disable @next/next/no-img-element */
-
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -10,7 +7,7 @@ import {
   ChevronRight,
   CircleUserRound,
   Dumbbell,
-  ImagePlus,
+  Images,
   LoaderCircle,
   LogOut,
   Menu,
@@ -23,6 +20,7 @@ import {
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError, apiRequest, isSupabaseConfigured, readSession, rememberSession, sessionStorageKey, type ForgeSession, type RoutinesResponse } from '@/lib/api';
 import type { DraftExercise, DraftSet, Exercise, Routine, RoutineDraft } from '@/lib/types';
+import { ExerciseMedia, MediaChooseButton, MediaProvider, useMediaLibrary } from './media-library';
 
 const uid = () => crypto.randomUUID();
 const trainingDays = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
@@ -44,7 +42,6 @@ function newExercise(): DraftExercise {
     name: '',
     imageUrl: null,
     imagePath: null,
-    imageFile: null,
     sets: [newSet(0), newSet(1), newSet(2)],
   };
 }
@@ -67,7 +64,6 @@ function draftFromRoutine(routine: Routine): RoutineDraft {
         name: exercise.name,
         imageUrl: exercise.image_url,
         imagePath: exercise.image_path,
-        imageFile: null,
         sets: exercise.gym_exercise_sets
           .slice()
           .sort((a, b) => a.set_number - b.set_number)
@@ -95,7 +91,6 @@ function exerciseToDraft(exercise: Exercise): DraftExercise {
     name: exercise.name,
     imageUrl: exercise.image_url,
     imagePath: exercise.image_path,
-    imageFile: null,
     sets: exercise.gym_exercise_sets
       .slice()
       .sort((a, b) => a.set_number - b.set_number)
@@ -256,21 +251,6 @@ export default function WorkoutApp() {
     setEditorOpen(true);
   }
 
-  async function uploadImage(exercise: DraftExercise, routineId: string) {
-    if (!exercise.imageFile) return { image_path: exercise.imagePath, image_url: exercise.imageUrl };
-    if (!session) throw new ApiError('Silakan masuk kembali.', 401);
-    if (exercise.imageFile.size > 5 * 1024 * 1024) throw new Error('Ukuran foto maksimal 5 MB.');
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(exercise.imageFile.type)) {
-      throw new Error('Gunakan foto JPEG, PNG, atau WebP.');
-    }
-    const body = new FormData();
-    body.append('routine_id', routineId);
-    body.append('file', exercise.imageFile);
-    return apiRequest<{ image_path: string; image_url: string }>('/images', {
-      method: 'POST', token: session.session_token, body,
-    });
-  }
-
   async function saveRoutine(event: FormEvent) {
     event.preventDefault();
     if (!session || !draft || !draft.name.trim()) return showToast('Nama routine wajib diisi.');
@@ -278,13 +258,11 @@ export default function WorkoutApp() {
     setSaving(true);
     try {
       const routineId = draft.id ?? uid();
-      const exercisePayload = draft.id ? undefined : await Promise.all(
-        draft.exercises.map(async (exercise) => ({
+      const exercisePayload = draft.id ? undefined : draft.exercises.map((exercise) => ({
           name: exercise.name.trim(),
-          image_path: (await uploadImage(exercise, routineId)).image_path,
+          image_path: exercise.imagePath,
           sets: exercise.sets.map((set) => ({ weight_kg: parseWeight(set.weightKg), reps: Number(set.reps) || 0 })),
-        })),
-      );
+        }));
       await apiRequest('/routines', {
         method: draft.id ? 'PATCH' : 'POST', token: session.session_token,
         body: { id: routineId, name: draft.name.trim(), training_day: draft.trainingDay.trim(), note: draft.note.trim(), exercises: exercisePayload },
@@ -302,7 +280,7 @@ export default function WorkoutApp() {
     if (!exerciseDraft.name.trim()) { showToast('Nama exercise wajib diisi.'); return false; }
     if (!exerciseDraft.sets.length) { showToast('Tambahkan minimal satu set.'); return false; }
     try {
-      const image = await uploadImage(exerciseDraft, routine.id);
+      const image = { image_path: exerciseDraft.imagePath, image_url: exerciseDraft.imageUrl };
       const previous = routine.gym_exercises.find((exercise) => exercise.id === exerciseId);
       const nextExercise: Exercise = {
         id: exerciseId ?? uid(), name: exerciseDraft.name.trim(), ...image,
@@ -355,6 +333,7 @@ export default function WorkoutApp() {
   if (!session) return <AuthScreen onAuthenticated={onAuthenticated} initialError={authError} />;
 
   return (
+    <MediaProvider key={session.session_token} token={session.session_token} onError={handleError}>
     <main className="app-shell">
       <Sidebar open={mobileMenu} onClose={() => setMobileMenu(false)} onSignOut={signOut} />
       <section className="content">
@@ -363,6 +342,7 @@ export default function WorkoutApp() {
           <div><p className="eyebrow">WORKOUT</p><h1>{selectedRoutine ? selectedRoutine.name : 'Ready to get stronger?'}</h1></div>
           <div className="profile-chip"><div className="avatar">RA</div><div><strong>{session.user.name}</strong><span>Keep showing up</span></div></div>
         </header>
+        <GalleryButton />
         {loadError && <div className="connection-error" role="alert"><span>{loadError}</span><button className="secondary-button" onClick={() => void loadRoutines(session.session_token).catch(() => {})}>Coba lagi</button></div>}
         {selectedRoutine ? (
           <RoutineDetail key={selectedRoutine.id} routine={selectedRoutine} onBack={() => setSelectedId(null)} onEditInfo={() => openEditRoutine(selectedRoutine)} onDelete={() => deleteRoutine(selectedRoutine)} onSaveExercise={saveExercise} onDeleteExercise={deleteExercise} />
@@ -373,7 +353,13 @@ export default function WorkoutApp() {
       {editorOpen && draft && <RoutineEditor draft={draft} setDraft={setDraft} saving={saving} onClose={() => setEditorOpen(false)} onSave={saveRoutine} />}
       {toast && <div className="toast" role="status"><Check size={17} />{toast}</div>}
     </main>
+    </MediaProvider>
   );
+}
+
+function GalleryButton() {
+  const open = useMediaLibrary();
+  return <div className="gallery-action"><button type="button" className="secondary-button" onClick={() => open()}><Images size={17} /> Galeri media</button></div>;
 }
 
 function Sidebar({ open, onClose, onSignOut }: { open: boolean; onClose: () => void; onSignOut: () => void }) {
@@ -485,7 +471,7 @@ function RoutineDetail({
           <article className="exercise-card" key={exercise.id}>
             <div className="exercise-title">
               <div className="exercise-image">
-                {exercise.image_url ? <img src={exercise.image_url} alt={exercise.name} /> : <Dumbbell size={24} />}
+                <ExerciseMedia url={exercise.image_url} path={exercise.image_path} name={exercise.name} autoPlay />
               </div>
               <div><span>EXERCISE {String(index + 1).padStart(2, '0')}</span><h3>{exercise.name}</h3></div>
               <div className="exercise-menu-wrap">
@@ -524,10 +510,7 @@ function ExerciseEditCard({ draft, index, saving, onChange, onSave, onCancel }: 
     <article className="exercise-card exercise-edit-card">
       <div className="inline-editor-label"><span>{draft.clientId && draft.name ? 'EDIT EXERCISE' : 'NEW EXERCISE'}</span><strong>Exercise {String(index + 1).padStart(2, '0')}</strong></div>
       <div className="draft-exercise-top">
-        <label className="image-picker">
-          {draft.imageFile ? <img src={URL.createObjectURL(draft.imageFile)} alt="Preview exercise" /> : draft.imageUrl ? <img src={draft.imageUrl} alt="Preview exercise" /> : <><ImagePlus size={22} /><small>Add photo</small></>}
-          <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => onChange({ ...draft, imageFile: event.target.files?.[0] ?? null })} />
-        </label>
+        <MediaChooseButton path={draft.imagePath} url={draft.imageUrl} onSelect={(media) => onChange({ ...draft, imagePath: media?.image_path ?? null, imageUrl: media?.image_url ?? null })} />
         <label className="field exercise-name"><span>Nama exercise</span><input value={draft.name} onChange={(event) => onChange({ ...draft, name: event.target.value })} placeholder="Nama gerakan" autoFocus /></label>
       </div>
       <div className="draft-set-header"><span>SET</span><span>KG</span><span>REPS</span><span /></div>
@@ -588,10 +571,7 @@ function RoutineEditor({ draft, setDraft, saving, onClose, onSave }: { draft: Ro
               {draft.exercises.map((exercise, exerciseIndex) => (
                 <article className="draft-exercise" key={exercise.clientId}>
                   <div className="draft-exercise-top">
-                    <label className="image-picker">
-                      {exercise.imageFile ? <img src={URL.createObjectURL(exercise.imageFile)} alt="Preview exercise" /> : exercise.imageUrl ? <img src={exercise.imageUrl} alt="Preview exercise" /> : <><ImagePlus size={22} /><small>Add photo</small></>}
-                      <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => updateExercise(exerciseIndex, { imageFile: event.target.files?.[0] ?? null })} />
-                    </label>
+                    <MediaChooseButton path={exercise.imagePath} url={exercise.imageUrl} onSelect={(media) => updateExercise(exerciseIndex, { imagePath: media?.image_path ?? null, imageUrl: media?.image_url ?? null })} />
                     <label className="field exercise-name"><span>Exercise {String(exerciseIndex + 1).padStart(2, '0')}</span><input value={exercise.name} onChange={(event) => updateExercise(exerciseIndex, { name: event.target.value })} placeholder="Nama gerakan" /></label>
                     <button type="button" className="remove-exercise" onClick={() => setDraft({ ...draft, exercises: draft.exercises.filter((_, index) => index !== exerciseIndex) })} aria-label="Hapus exercise"><Trash2 size={17} /></button>
                   </div>

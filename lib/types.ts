@@ -34,7 +34,6 @@ export type DraftExercise = {
   name: string;
   imageUrl: string | null;
   imagePath: string | null;
-  imageFile: File | null;
   sets: DraftSet[];
 };
 
@@ -44,4 +43,16 @@ export type RoutineDraft = {
   trainingDay: string;
   note: string;
   exercises: DraftExercise[];
+};
+
+export type MediaAsset = {
+  id: string;
+  name: string;
+  image_path: string;
+  image_url: string | null;
+  kind: 'image' | 'video';
+  mime_type: string;
+  size_bytes: number;
+  duration_seconds: number | null;
+  created_at: string;
 };

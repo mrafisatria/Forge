@@ -31,11 +31,14 @@ export function metadata(body: Record<string, unknown>) {
 
 export function imagePath(value: unknown, owner: string, routineId: string): string | null {
   if (value === null || value === undefined || value === '') return null;
-  const prefix = `${owner}/${routineId}/`;
-  if (typeof value !== 'string' || !value.startsWith(prefix) || !/^[0-9a-f-]{36}\.(jpg|png|webp)$/.test(value.slice(prefix.length))) {
-    throw new HttpError('Foto tidak berasal dari routine ini.', 400);
+  const prefix = `${owner}/`;
+  if (typeof value !== 'string' || !value.startsWith(prefix) || !/^(library|[0-9a-f-]{36})\/[0-9a-f-]{36}\.(jpg|png|webp|mp4)$/.test(value.slice(prefix.length))) {
+    throw new HttpError('Media tidak berasal dari akun ini.', 400);
   }
-  uuid(value.slice(prefix.length).split('.')[0]);
+  const [folder, file] = value.slice(prefix.length).split('/');
+  if (folder !== 'library') uuid(folder);
+  uuid(file.split('.')[0]);
+  void routineId; // Retain the legacy validator signature for existing callers.
   return value;
 }
 
