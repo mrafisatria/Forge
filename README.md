@@ -40,7 +40,7 @@ Jangan jalankan dengan placeholder. Constraint singleton menolak akun kedua. Unt
 supabase functions deploy forge-api --project-ref mriotylczlxaxydhorga --no-verify-jwt
 ~~~
 
-Atau buat Edge Function bernama **forge-api** di dashboard, masukkan **index.ts**, **handler.ts**, **validation.ts**, dan **deno.json**, lalu deploy. Verifikasi JWT bawaan dimatikan **hanya untuk forge-api** karena fungsi ini memeriksa token sesi Forge sendiri. Jangan mengubah dompetku-api.
+Atau buat Edge Function bernama **forge-api** di dashboard, masukkan seluruh berkas dari folder **supabase/functions/forge-api**, lalu deploy. Verifikasi JWT bawaan dimatikan **hanya untuk forge-api** karena fungsi ini memeriksa token sesi Forge sendiri. Jangan mengubah dompetku-api.
 
 Untuk editor dashboard yang lebih praktis, jalankan **npm run bundle:edge**. Salin hasil **outputs/forge-api/index.ts** menjadi berkas utama **index.ts** di editor. Bundle ini dibuat dari source yang sama dan tidak memuat secret akun atau key server.
 
@@ -72,11 +72,21 @@ Di Vercel, import repository Forge sebagai Next.js, tambahkan kedua variable di 
 
 Tombol melayang di tepi layar membuka preset **1:00, 1:30, 2:00, 3:00, dan 4:00**. Pilih durasi untuk langsung memulai dan menutup panel; sisa waktu tampil di bulatan. Alarm berulang saat habis dan berhenti saat bulatan ditekan. Ketika sedang menghitung, tekan bulatan untuk mengganti durasi atau membatalkan timer. Bulatan dapat digeser dan menempel ke sisi layar.
 
-Timer berjalan lokal selama sesi halaman (tidak disimpan ke database atau dipertahankan setelah refresh/logout), dan tidak hilang saat berpindah routine atau membuka galeri. Hitung mundur menggunakan waktu selesai absolut agar tidak melambat karena tab berada di belakang. Suara diaktifkan dari klik preset; timer menampilkan peringatan bila browser menolak audio. Tidak meminta izin notifikasi OS.
+Hitung mundur menggunakan waktu selesai absolut. Saat Forge terlihat, alarm berbunyi sampai bulatan ditekan. Saat minimize, semua audio timer dihentikan; tidak ada audio senyap atau mode playback latar belakang yang mengambil alih Spotify. Timer yang selesai saat tersembunyi tidak memutar alarm terlambat ketika Forge dibuka lagi.
 
-Pada browser yang mendukung `navigator.audioSession`, timer memakai mode `playback` dan langsung memutar buffer berisi jeda senyap, disusul nada yang berulang. Dengan begitu, nada tidak menunggu JavaScript halaman aktif kembali saat Forge di-minimize. Hanya bagian nada yang diulang; buffer mono 8 kHz untuk preset terlama memakai kurang dari 8 MB. Mode audio sebelumnya dipulihkan saat timer dihentikan. Browser tanpa API ini tetap memakai alarm halaman biasa.
+### Notifikasi saat minimize
 
-Aktifkan volume dan jangan tutup paksa Forge. Dukungan latar belakang tetap bergantung pada iOS/browser; telepon, audio aplikasi lain, atau penghentian aplikasi oleh OS dapat menginterupsi alarm. Mode playback juga dapat menjeda musik dari aplikasi lain. Ini bukan pengganti alarm native iPhone dan perlu diuji langsung di perangkat, termasuk saat minimize/layar terkunci. Lihat [AudioSession playback](https://developer.mozilla.org/en-US/docs/Web/API/AudioSession/type), [pengujian background Web Audio oleh WebKit](https://github.com/WebKit/WebKit/blob/main/LayoutTests/media/webaudio-background-playback.html), dan [aturan aktivasi audio](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Best_practices).
+Jalankan **supabase/migrations/20260903_timer_notifications.sql** lalu **supabase/migrations/20260903_timer_claim_retry.sql** sekali, kemudian deploy ulang **forge-api** sebelum menerbitkan frontend. Migrasi membuat tiga tabel Forge privat, RPC yang hanya bisa diakses server, dan dua job Cron bernama `forge-timer-notifications` serta `forge-timer-notification-cleanup`. Tidak mengubah data atau job aplikasi lain. URL dispatcher dalam migrasi mengarah ke proyek Supabase Forge yang sekarang; ubah URL tersebut jika memasang pada proyek lain. Uji transaksi administratif di **supabase/tests/timer_notifications.sql** memeriksa cancellation, presence, claim, retry, serta logout dan membatalkan semua data uji melalui rollback.
+
+Kunci VAPID dibuat sekali di server ketika konfigurasi notifikasi pertama kali diminta akun Rafi. Kunci privat dan secret dispatcher disimpan pada tabel `forge_push_settings` yang tidak dapat dibaca anon/authenticated. Hanya kunci publik dikirim ke frontend; tidak membutuhkan variable Vercel baru. Pengiriman dienkripsi dengan Web Push dan dibatasi ke layanan push Apple, Google, dan Mozilla, tanpa mengikuti redirect.
+
+Di panel timer, tekan **Aktifkan notifikasi** dan izinkan permintaan browser. Di iPhone gunakan Forge dari Home Screen (iOS 16.4+); bila shortcut lama masih membuka tab browser biasa, tambahkan ulang dari Safari setelah pembaruan ini. Pilih preset dan tunggu pesan penjadwalan selesai sebelum minimize. Tombol **Nonaktifkan notifikasi** membatalkan langganan perangkat ini. Izin tidak diminta otomatis.
+
+Deadline dicatat ke Supabase saat timer dimulai. Cron memeriksa setiap lima detik tetapi hanya memanggil Edge Function saat ada timer yang jatuh tempo. Kehadiran halaman diperbarui setiap lima detik saat terlihat; timer yang selesai di foreground membatalkan notifikasi. Ada grace period dua detik dan expiry kehadiran 12 detik agar minim duplikasi. Penggantian/pembatalan bersifat idempoten; cancel yang tiba sebelum start tidak menghidupkan kembali timer. Keluar akun mencabut sesi dan menghapus langganan terkait melalui foreign key. Timer di perangkat lain tidak dibatalkan.
+
+Notifikasi hanya berisi pengingat umum, menggunakan `silent: true`, dan membuka Forge saat ditekan. Tidak memutar alarm atau menyimpan halaman, token login, dan media pribadi di service worker. Notifikasi tetap bergantung pada internet, dukungan browser, izin dan Focus; pengiriman bisa terlambat dan bukan jaminan alarm tepat detik. Bila start/cancel gagal, UI memberi peringatan. Pengiriman dibatasi tiga percobaan dalam dua menit, TTL push 60 detik, dan satu tag per timer. Catatan timer dibersihkan setelah tujuh hari, log Cron Forge setelah satu hari. Refresh menghilangkan hitung mundur lokal; jadwal yang sudah diterima server tetap dapat mengirim notifikasi.
+
+Referensi: [Web Push untuk Home Screen iPhone](https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/), [Supabase Cron](https://supabase.com/docs/guides/cron), [Web Push library](https://github.com/web-push-libs/web-push).
 
 ## Galeri media exercise
 
@@ -102,5 +112,7 @@ npm run build
 Test lokal memakai backend tiruan: autentikasi Rafi, pembatas login, isolasi sesi/owner, logout, validasi data dan foto. Tetap periksa koneksi nyata setelah schema dan Edge Function terpasang.
 
 **scripts/check-live-api.mjs** tersedia untuk pemeriksaan koneksi nyata. Jalankan dengan environment lokal dan masukkan secret lewat stdin (jangan lewat argumen perintah yang disimpan). Skrip ini membuat satu routine sementara, memeriksa penyimpanan dan akses, kemudian menghapus routine tersebut serta mencabut sesi uji. Jangan menjalankannya sebagai pemeriksaan read-only.
+
+**scripts/check-live-push.mjs** memeriksa konfigurasi VAPID, jadwal/pembatalan, isolasi perangkat, dan izin tabel melalui API nyata. Secret juga dibaca dari stdin. Skrip membuat perangkat dan timer sementara, membatalkan timer sebelum jatuh tempo, kemudian membersihkan perangkat serta sesi uji; tidak mengirim push nyata. Pengiriman ke iPhone perlu diuji pada perangkat setelah pengguna mengizinkan notifikasi.
 
 Foto yang diganti/dihapus dari routine tidak otomatis dihapus dari Storage untuk menghindari kehilangan foto saat ada kegagalan penyimpanan; bersihkan file yatim lewat administrasi bila diperlukan.

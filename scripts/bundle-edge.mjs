@@ -9,6 +9,7 @@ await build({
     name: 'supabase-edge-imports',
     setup(builder) {
       builder.onResolve({ filter: /^@supabase\/supabase-js$/ }, () => ({ path: 'npm:@supabase/supabase-js@2.112.3', external: true }));
+      builder.onResolve({ filter: /^web-push$/ }, () => ({ path: 'npm:web-push@3.6.7', external: true }));
       builder.onResolve({ filter: /^jsr:.*edge-runtime\.d\.ts$/ }, () => ({ path: 'edge-types', namespace: 'empty-types' }));
       builder.onLoad({ filter: /.*/, namespace: 'empty-types' }, () => ({ contents: '' }));
     },

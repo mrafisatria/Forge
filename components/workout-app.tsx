@@ -353,7 +353,7 @@ export default function WorkoutApp() {
       </section>
       {editorOpen && draft && <RoutineEditor draft={draft} setDraft={setDraft} saving={saving} onClose={() => setEditorOpen(false)} onSave={saveRoutine} />}
       {toast && <div className="toast" role="status"><Check size={17} />{toast}</div>}
-      <RestTimer />
+      <RestTimer token={session.session_token} />
     </main>
     </MediaProvider>
   );

@@ -19,7 +19,7 @@ export class ApiError extends Error {
 }
 
 export async function apiRequest<T>(path: string, options: {
-  method?: string; token?: string; body?: unknown; signal?: AbortSignal;
+  method?: string; token?: string; body?: unknown; signal?: AbortSignal; keepalive?: boolean;
 } = {}): Promise<T> {
   if (!isSupabaseConfigured) throw new ApiError('Koneksi Supabase belum dikonfigurasi.', 503);
   const headers: Record<string, string> = { apikey: publishableKey! };
@@ -27,7 +27,7 @@ export async function apiRequest<T>(path: string, options: {
   const isForm = options.body instanceof FormData;
   if (!isForm) headers['Content-Type'] = 'application/json';
   const response = await fetch(`${supabaseUrl}/functions/v1/forge-api${path}`, {
-    method: options.method ?? 'GET', headers, cache: 'no-store', signal: options.signal,
+    method: options.method ?? 'GET', headers, cache: 'no-store', signal: options.signal, keepalive: options.keepalive,
     body: options.body === undefined ? undefined : isForm ? options.body as FormData : JSON.stringify(options.body),
   });
   const payload = await response.json().catch(() => null);

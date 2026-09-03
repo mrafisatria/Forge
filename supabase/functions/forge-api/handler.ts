@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { HttpError, object, uuid, metadata, exercises, secret, imageExtension } from './validation.ts';
 import { validateMedia, VIDEO_LIMIT } from './media-validation.ts';
+import { dispatchPush, pushRequest, type PushTransport } from './push.ts';
 
 const BUCKET = 'forge-exercise-images';
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -216,18 +217,26 @@ async function media(request: Request, admin: SupabaseClient, owner: string) {
   return json({ media: (await signedMedia(admin, [saved]))[0], reused: false }, 201);
 }
 
-export function createHandler(getAdmin: () => { admin: SupabaseClient; fingerprintKey: string }) {
+export function createHandler(getAdmin: () => { admin: SupabaseClient; fingerprintKey: string }, pushTransport?: PushTransport) {
   return async (request: Request) => {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
     try {
       const parts = new URL(request.url).pathname.split('/').filter(Boolean);
       const functionIndex = parts.lastIndexOf('forge-api');
       const route = functionIndex < 0 ? '' : '/' + parts.slice(functionIndex + 1).join('/');
-      if (!['/login', '/logout', '/routines', '/images', '/media'].includes(route)) throw new HttpError('Endpoint tidak ditemukan.', 404);
+      if (!['/login', '/logout', '/routines', '/images', '/media', '/push/config', '/push/subscriptions', '/push/timer', '/push/dispatch'].includes(route)) throw new HttpError('Endpoint tidak ditemukan.', 404);
       if (['/login', '/logout', '/images'].includes(route) && request.method !== 'POST') throw new HttpError('Metode tidak didukung.', 405);
       const { admin, fingerprintKey } = getAdmin();
+      if (route === '/push/dispatch') {
+        if (!pushTransport) throw new HttpError('Layanan notifikasi belum tersedia.', 503);
+        return json(await dispatchPush(request, admin, pushTransport));
+      }
       if (route === '/login') return await login(request, admin, fingerprintKey);
       const session = await authenticate(request, admin);
+      if (route.startsWith('/push/')) {
+        if (!pushTransport) throw new HttpError('Layanan notifikasi belum tersedia.', 503);
+        return json(await pushRequest(route, request.method, request.method === 'GET' ? {} : await readJson(request), admin, session, pushTransport));
+      }
       if (route === '/logout') {
         const { error } = await admin.from('forge_sessions').delete().eq('token_hash', session.tokenHash);
         if (error) throw error;
