@@ -1,13 +1,13 @@
 import { HttpError, imageExtension } from './validation.ts';
 
 export const VIDEO_LIMIT = 10 * 1024 * 1024;
-export const MAX_VIDEO_SECONDS = 3;
+export const MAX_VIDEO_SECONDS = 10;
 
 // Read bounded ISO-BMFF boxes, never trusting client-supplied duration metadata.
 export function mp4Duration(bytes: Uint8Array): number {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const ascii = (start: number, length: number) => String.fromCharCode(...bytes.subarray(start, start + length));
-  const invalid = () => new HttpError('Video MP4 tidak valid. Gunakan MP4 standar berdurasi maksimal 3 detik.', 400);
+  const invalid = () => new HttpError('Video MP4 tidak valid. Gunakan MP4 standar berdurasi maksimal 10 detik.', 400);
   type Box = { type: string; start: number; end: number };
   function boxes(start: number, end: number): Box[] {
     const result: Box[] = [];
@@ -54,7 +54,7 @@ export function mp4Duration(bytes: Uint8Array): number {
   }
   if (!video) throw invalid();
   const seconds = Math.max(...durations);
-  if (seconds > MAX_VIDEO_SECONDS) throw new HttpError('Video maksimal 3 detik. Potong video terlebih dahulu sebelum upload.', 400);
+  if (seconds > MAX_VIDEO_SECONDS) throw new HttpError('Video maksimal 10 detik. Potong video terlebih dahulu sebelum upload.', 400);
   return seconds;
 }
 

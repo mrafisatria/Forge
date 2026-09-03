@@ -23,8 +23,8 @@ export async function validateUpload(file: File) {
     };
     const timer = setTimeout(() => finish(new Error('Video tidak dapat dibaca. Gunakan MP4 H.264.')), 10000);
     video.preload = 'metadata';
-    video.onloadedmetadata = () => finish(!Number.isFinite(video.duration) || video.duration <= 0 || video.duration > 3
-      ? new Error('Video maksimal 3 detik. Potong video terlebih dahulu.') : undefined);
+    video.onloadedmetadata = () => finish(!Number.isFinite(video.duration) || video.duration <= 0 || video.duration > 10
+      ? new Error('Video maksimal 10 detik. Potong video terlebih dahulu.') : undefined);
     video.onerror = () => finish(new Error('Video tidak didukung browser ini. Gunakan MP4 H.264.'));
     video.src = url;
   });

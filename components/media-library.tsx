@@ -131,7 +131,7 @@ function MediaLibrary({ token, picker, onError, onClose }: { token: string; pick
     <header><div><p className="eyebrow">WORKOUT MEDIA</p><h2 id="media-title">{picker.onSelect ? 'Pilih media exercise' : 'Galeri media'}</h2></div><button type="button" className="close-button" onClick={onClose} disabled={busy} aria-label="Tutup galeri"><X size={20} /></button></header>
     <div className="media-library-body">
       <div className="media-upload-zone">
-        <Images size={26} /><div><strong>Upload sekali, pakai di banyak exercise.</strong><p>JPG, PNG, WebP hingga 5 MB · MP4 hingga 10 MB, maksimal 3 detik.</p></div>
+        <Images size={26} /><div><strong>Upload sekali, pakai di banyak exercise.</strong><p>JPG, PNG, WebP hingga 5 MB · MP4 hingga 10 MB, maksimal 10 detik.</p></div>
         <input ref={input} type="file" multiple accept={MEDIA_ACCEPT} hidden onChange={(event) => { addFiles(event.target.files); event.target.value = ''; }} aria-label="Upload gambar dan video" />
         <button type="button" className="primary-button" onClick={() => input.current?.click()} disabled={busy}><Upload size={16} />{busy ? 'Mengunggah...' : 'Upload media'}</button>
       </div>

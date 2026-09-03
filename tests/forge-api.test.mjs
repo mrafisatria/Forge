@@ -228,12 +228,15 @@ function mp4Fixture(seconds = 2, version = 0) {
   ]);
 }
 
-test('media validation accepts 2-second MP4 and rejects long, truncated, or forged files', async () => {
+test('media validation accepts MP4 up to 10 seconds and rejects long, truncated, or forged files', async () => {
   assert.equal(mp4Duration(mp4Fixture(2)), 2);
   assert.equal(mp4Duration(mp4Fixture(2, 1)), 2);
+  assert.equal(mp4Duration(mp4Fixture(4)), 4);
+  assert.equal(mp4Duration(mp4Fixture(10)), 10);
+  assert.equal(mp4Duration(mp4Fixture(10, 1)), 10);
   const result = await validateMedia(new File([mp4Fixture()], 'demo.mp4', { type: 'video/mp4' }));
   assert.equal(result.kind, 'video'); assert.equal(result.duration, 2);
-  for (const bytes of [mp4Fixture(4), mp4Fixture().subarray(0, 25), Buffer.from('not an mp4'), mp4Fixture(0)]) assert.throws(() => mp4Duration(bytes));
+  for (const bytes of [mp4Fixture(10.001), mp4Fixture(11), mp4Fixture().subarray(0, 25), Buffer.from('not an mp4'), mp4Fixture(0)]) assert.throws(() => mp4Duration(bytes));
   await assert.rejects(validateMedia(new File([new Uint8Array(10 * 1024 * 1024 + 1)], 'huge.mp4', { type: 'video/mp4' })));
   await assert.rejects(validateMedia(new File([mp4Fixture()], 'demo.webm', { type: 'video/webm' })));
   assert.throws(() => validateUploadSize({ type: 'image/png', size: 6 * 1024 * 1024 }));
@@ -285,7 +288,7 @@ test('gallery selection can be reused across routines but rejects missing or for
 test('mixed upload results preserve successful files; long video is rejected before storage', async () => {
   const { request, login, state } = fixture(); const { session_token: token } = await login();
   const statuses = [];
-  for (const [name, bytes] of [['first.mp4', mp4Fixture(2)], ['long.mp4', mp4Fixture(4)], ['second.mp4', mp4Fixture(1)]]) {
+  for (const [name, bytes] of [['first.mp4', mp4Fixture(10)], ['long.mp4', mp4Fixture(11)], ['second.mp4', mp4Fixture(1)]]) {
     const body = new FormData(); body.append('file', new File([bytes], name, { type: 'video/mp4' }));
     statuses.push((await request('/media', { method: 'POST', token, body })).status);
   }

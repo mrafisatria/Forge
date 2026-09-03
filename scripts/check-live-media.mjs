@@ -27,7 +27,9 @@ try {
   assert.equal((await call('/routines')).status, 200);
   for (const type of ['image/png', 'video/mp4']) {
     const form = new FormData(); form.append('file', new File(['not a valid media file'], 'invalid', { type }));
-    assert.equal((await call('/media', 'POST', form)).status, 400);
+    const rejected = await call('/media', 'POST', form);
+    assert.equal(rejected.status, 400);
+    if (type === 'video/mp4') assert.match(rejected.data.error, /maksimal 10 detik/);
   }
   assert.equal((await call('/media?offset=-1')).status, 400);
   const direct = await fetch(`${url}/rest/v1/forge_media?select=id&limit=1`, { headers: { apikey: key } });

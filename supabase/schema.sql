@@ -74,7 +74,7 @@ create table if not exists public.forge_media (
   content_hash text check (content_hash ~ '^[0-9a-f]{64}$'),
   created_at timestamptz not null default now(),
   unique(user_id, content_hash),
-  check ((kind = 'image' and duration_seconds is null) or (kind = 'video' and duration_seconds > 0 and duration_seconds <= 3)),
+  constraint forge_media_duration_check check ((kind = 'image' and duration_seconds is null) or (kind = 'video' and duration_seconds > 0 and duration_seconds <= 10)),
   check (split_part(image_path, '/', 1) = user_id::text)
 );
 create index if not exists forge_media_user_created_idx on public.forge_media(user_id, created_at desc, id);

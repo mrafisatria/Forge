@@ -342,7 +342,6 @@ export default function WorkoutApp() {
           <div><p className="eyebrow">WORKOUT</p><h1>{selectedRoutine ? selectedRoutine.name : 'Ready to get stronger?'}</h1></div>
           <div className="profile-chip"><div className="avatar">RA</div><div><strong>{session.user.name}</strong><span>Keep showing up</span></div></div>
         </header>
-        <GalleryButton />
         {loadError && <div className="connection-error" role="alert"><span>{loadError}</span><button className="secondary-button" onClick={() => void loadRoutines(session.session_token).catch(() => {})}>Coba lagi</button></div>}
         {selectedRoutine ? (
           <RoutineDetail key={selectedRoutine.id} routine={selectedRoutine} onBack={() => setSelectedId(null)} onEditInfo={() => openEditRoutine(selectedRoutine)} onDelete={() => deleteRoutine(selectedRoutine)} onSaveExercise={saveExercise} onDeleteExercise={deleteExercise} />
@@ -357,18 +356,17 @@ export default function WorkoutApp() {
   );
 }
 
-function GalleryButton() {
-  const open = useMediaLibrary();
-  return <div className="gallery-action"><button type="button" className="secondary-button" onClick={() => open()}><Images size={17} /> Galeri media</button></div>;
-}
-
 function Sidebar({ open, onClose, onSignOut }: { open: boolean; onClose: () => void; onSignOut: () => void }) {
+  const openMedia = useMediaLibrary();
   return (
     <>
       {open && <button className="menu-overlay" onClick={onClose} aria-label="Tutup menu" />}
       <aside className={'sidebar ' + (open ? 'open' : '')}>
         <div className="brand"><span className="brand-mark"><Dumbbell size={19} /></span><span>FORGE</span></div>
-        <nav><button className="active" onClick={onClose}><Dumbbell size={19} /><span>Workout</span></button></nav>
+        <nav>
+          <button className="active" onClick={onClose}><Dumbbell size={19} /><span>Workout</span></button>
+          <button onClick={() => { onClose(); openMedia(); }}><Images size={19} /><span>Galeri media</span></button>
+        </nav>
         <div className="sidebar-bottom"><button onClick={onSignOut}><LogOut size={18} /><span>Keluar</span></button></div>
       </aside>
     </>
