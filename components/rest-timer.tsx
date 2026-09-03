@@ -52,7 +52,7 @@ export function RestTimer() {
         setOpen(false);
         setAnnouncement('Waktu istirahat selesai. Tekan bulatan timer untuk menghentikan alarm.');
         // Resync against wall time if the page/audio was suspended in the background.
-        void alarm.current?.schedule(Date.now()).then((ready) => {
+        void alarm.current?.ring().then((ready) => {
           if (active.current === finished) setAudioWarning(!ready);
         });
       }
@@ -146,7 +146,7 @@ export function RestTimer() {
       <header><h2 id={titleId}>Timer istirahat</h2><button type="button" className="close-button" aria-label="Tutup pilihan timer" onClick={() => { setOpen(false); trigger.current?.focus(); }}><X size={18} /></button></header>
       <div className="rest-timer-presets">{TIMER_PRESETS.map((seconds, index) => <button ref={index === 0 ? firstPreset : undefined} key={seconds} type="button" onClick={() => start(seconds, Date.now())} aria-label={`Mulai timer ${formatTimer(seconds)}`}><Timer size={17} /><strong>{formatTimer(seconds)}</strong></button>)}</div>
       {countdown && <button type="button" className="rest-timer-cancel" onClick={stop}>Batalkan timer</button>}
-      <p>Biarkan halaman terbuka dan volume aktif. Suara bisa tertunda saat layar terkunci.</p>
+      <p>Aktifkan volume. Minimize didukung pada iPhone yang kompatibel; jangan tutup paksa aplikasi. Telepon atau audio lain bisa mengganggu alarm.</p>
     </section>}
     {audioWarning && <p className="rest-timer-warning" role="status">Suara diblokir browser. {countdown?.ringing ? 'Waktu habis—ketuk bulatan.' : 'Mulai ulang timer untuk mengaktifkan suara.'}</p>}
     <button ref={trigger} type="button" className="rest-timer-orb" aria-label={label} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? panelId : undefined}
