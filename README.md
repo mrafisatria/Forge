@@ -17,6 +17,8 @@ Gym tracker Next.js untuk routine, exercise, foto, set, beban KG (termasuk koma 
 
 Buat routine kosong, edit nama/hari/catatan melalui tombol pensil, tambah exercise melalui Add exercise, lalu edit langsung atau hapus exercise melalui menu tiga titik. Input mobile berukuran minimal 16 px agar fokus tidak memicu zoom iOS.
 
+Daftar routine otomatis diurutkan Senin sampai Minggu. Routine tanpa hari atau dengan hari kustom lama berada paling bawah; urutan antar-routine pada hari yang sama tetap dipertahankan.
+
 ## Setup Supabase
 
 1. Jalankan **supabase/schema.sql** di SQL Editor proyek tujuan. Skrip ini untuk instalasi Forge baru, bukan migrasi dari versi Supabase Auth lama. Tidak mengubah tabel Dompetku.

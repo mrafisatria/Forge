@@ -20,10 +20,10 @@ import {
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError, apiRequest, isSupabaseConfigured, readSession, rememberSession, sessionStorageKey, type ForgeSession, type RoutinesResponse } from '@/lib/api';
 import type { DraftExercise, DraftSet, Exercise, Routine, RoutineDraft } from '@/lib/types';
+import { sortRoutinesByDay, trainingDays } from '@/lib/routines';
 import { ExerciseMedia, MediaChooseButton, MediaProvider, useMediaLibrary } from './media-library';
 
 const uid = () => crypto.randomUUID();
-const trainingDays = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
 
 function parseWeight(value: string) {
   const normalized = value.trim().replace(',', '.');
@@ -374,6 +374,7 @@ function Sidebar({ open, onClose, onSignOut }: { open: boolean; onClose: () => v
 }
 
 function RoutineOverview({ routines, loading, onCreate, onOpen }: { routines: Routine[]; loading: boolean; onCreate: () => void; onOpen: (id: string) => void }) {
+  const sortedRoutines = useMemo(() => sortRoutinesByDay(routines), [routines]);
   const exerciseCount = routines.reduce((total, routine) => total + routine.gym_exercises.length, 0);
   const setCount = routines.reduce((total, routine) => total + routine.gym_exercises.reduce((sum, exercise) => sum + exercise.gym_exercise_sets.length, 0), 0);
 
@@ -394,7 +395,7 @@ function RoutineOverview({ routines, loading, onCreate, onOpen }: { routines: Ro
         <div className="routine-grid">{[1, 2, 3].map((item) => <div className="routine-card skeleton" key={item} />)}</div>
       ) : (
         <div className="routine-grid">
-          {routines.map((routine, index) => (
+          {sortedRoutines.map((routine, index) => (
             <article className="routine-card" key={routine.id}>
               <div className={`routine-icon tone-${index % 3}`}><Dumbbell size={22} /></div>
               <span className="day">{routine.training_day || 'Fleksibel'}</span>
