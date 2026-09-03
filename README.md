@@ -68,6 +68,12 @@ npm run dev
 
 Di Vercel, import repository Forge sebagai Next.js, tambahkan kedua variable di **Project Settings → Environment Variables**, lalu redeploy. Env lokal tidak otomatis dikirim ke Vercel. Frontend Vercel dan Edge Function Supabase adalah dua deployment terpisah.
 
+## Timer istirahat
+
+Tombol melayang di tepi layar membuka preset **1:00, 1:30, 2:00, 3:00, dan 4:00**. Pilih durasi untuk langsung memulai dan menutup panel; sisa waktu tampil di bulatan. Alarm berulang saat habis dan berhenti saat bulatan ditekan. Ketika sedang menghitung, tekan bulatan untuk mengganti durasi atau membatalkan timer. Bulatan dapat digeser dan menempel ke sisi layar.
+
+Timer berjalan lokal selama sesi halaman (tidak disimpan ke database atau dipertahankan setelah refresh/logout), dan tidak hilang saat berpindah routine atau membuka galeri. Hitung mundur menggunakan waktu selesai absolut agar tidak melambat karena tab berada di belakang. Suara diaktifkan dari klik preset; timer menampilkan peringatan bila browser menolak audio. Tetap buka halaman dan aktifkan volume: browser/OS dapat menangguhkan audio saat layar terkunci atau aplikasi berada di latar belakang. Tidak meminta izin notifikasi OS. Lihat [aturan audio browser](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Best_practices) dan [batas timer tab latar belakang](https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API).
+
 ## Galeri media exercise
 
 - Buka menu **Galeri media** tepat di bawah **Workout** untuk upload hingga 20 file sekali pilih. Hasil setiap file ditampilkan; tombol coba ulang hanya mengunggah file yang gagal.

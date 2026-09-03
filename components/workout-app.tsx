@@ -23,6 +23,7 @@ import type { DraftExercise, DraftSet, Exercise, Routine, RoutineDraft } from '@
 import { sortRoutinesByDay, trainingDays } from '@/lib/routines';
 import { MediaChooseButton, MediaProvider, useMediaLibrary } from './media-library';
 import { ExerciseMediaButton } from './exercise-media-button';
+import { RestTimer } from './rest-timer';
 
 const uid = () => crypto.randomUUID();
 
@@ -352,6 +353,7 @@ export default function WorkoutApp() {
       </section>
       {editorOpen && draft && <RoutineEditor draft={draft} setDraft={setDraft} saving={saving} onClose={() => setEditorOpen(false)} onSave={saveRoutine} />}
       {toast && <div className="toast" role="status"><Check size={17} />{toast}</div>}
+      <RestTimer />
     </main>
     </MediaProvider>
   );
