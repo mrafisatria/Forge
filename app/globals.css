@@ -18,9 +18,9 @@
 html { background: var(--bg); }
 html, body { min-height: 100%; }
 body { margin: 0; background: var(--bg); color: var(--white); font-family: Arial, Helvetica, sans-serif; }
-button, input { font: inherit; }
+button, input, select { font: inherit; }
 button { color: inherit; }
-button:focus-visible, input:focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
 button:disabled { cursor: default; }
 h1, h2, h3, p { margin-top: 0; }
 .spin { animation: spin .8s linear infinite; }
@@ -110,7 +110,8 @@ h1, h2, h3, p { margin-top: 0; }
 .editor > header { padding: 24px 26px 19px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: flex-start; }.editor > header h2 { margin: 0; font-size: 24px; }.close-button { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-raised); cursor: pointer; }
 .editor-body { padding: 23px 26px 50px; overflow-y: auto; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }.field { display: grid; gap: 7px; }.field.wide { grid-column: 1 / -1; }.field > span { color: #949d98; font-size: 10px; font-weight: 800; }
-.field input, .draft-set-row input { width: 100%; border: 1px solid #303632; border-radius: 10px; padding: 11px 12px; color: var(--white); background: #151917; font-size: 12px; }.field input::placeholder, .draft-set-row input::placeholder { color: #535b56; }
+.field input, .field select, .draft-set-row input { width: 100%; border: 1px solid #303632; border-radius: 10px; padding: 11px 12px; color: var(--white); background: #151917; font-size: 12px; }.field input::placeholder, .draft-set-row input::placeholder { color: #535b56; }
+.field select { min-width: 0; color-scheme: dark; cursor: pointer; }
 .editor-section-title { margin: 31px 0 12px; display: flex; align-items: end; justify-content: space-between; }.editor-section-title > div { display: grid; gap: 3px; }.editor-section-title span { color: var(--lime); font-size: 8px; font-weight: 900; letter-spacing: .13em; }.editor-section-title strong { font-size: 14px; }.editor-section-title button, .add-set { border: 0; background: transparent; color: var(--lime); display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 10px; font-weight: 800; }
 .draft-exercises { display: grid; gap: 12px; }.draft-exercise { padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: #121614; }
 .editor-empty { min-height: 100px; padding: 18px; border: 1px dashed #313833; border-radius: 14px; display: flex; align-items: center; justify-content: center; gap: 12px; color: #68716c; background: #101311; }.editor-empty > div { display: grid; gap: 4px; }.editor-empty strong { color: #b7bfba; font-size: 12px; }.editor-empty span { font-size: 10px; }

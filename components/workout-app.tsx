@@ -25,6 +25,7 @@ import { ApiError, apiRequest, isSupabaseConfigured, readSession, rememberSessio
 import type { DraftExercise, DraftSet, Exercise, Routine, RoutineDraft } from '@/lib/types';
 
 const uid = () => crypto.randomUUID();
+const trainingDays = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
 
 function parseWeight(value: string) {
   const normalized = value.trim().replace(',', '.');
@@ -56,7 +57,7 @@ function draftFromRoutine(routine: Routine): RoutineDraft {
   return {
     id: routine.id,
     name: routine.name,
-    trainingDay: routine.training_day ?? '',
+    trainingDay: trainingDays.find((day) => day.toLowerCase() === routine.training_day?.trim().toLowerCase()) ?? routine.training_day ?? '',
     note: routine.note ?? '',
     exercises: routine.gym_exercises
       .slice()
@@ -562,7 +563,15 @@ function RoutineEditor({ draft, setDraft, saving, onClose, onSave }: { draft: Ro
         <div className="editor-body">
           <div className="form-grid">
             <label className="field wide"><span>Nama routine</span><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Contoh: Chest + Back" autoFocus /></label>
-            <label className="field"><span>Hari latihan</span><input value={draft.trainingDay} onChange={(event) => setDraft({ ...draft, trainingDay: event.target.value })} placeholder="Contoh: Senin" /></label>
+            <label className="field">
+              <span>Hari latihan</span>
+              <select value={draft.trainingDay} onChange={(event) => setDraft({ ...draft, trainingDay: event.target.value })}>
+                <option value="">Pilih hari</option>
+                {/* Preserve older custom values until the user chooses a day. */}
+                {draft.trainingDay && !trainingDays.includes(draft.trainingDay) && <option value={draft.trainingDay} disabled>{draft.trainingDay} (tersimpan)</option>}
+                {trainingDays.map((day) => <option key={day} value={day}>{day}</option>)}
+              </select>
+            </label>
             <label className="field"><span>Catatan</span><input value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="Target atau fokus latihan" /></label>
           </div>
 
