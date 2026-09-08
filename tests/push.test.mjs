@@ -173,11 +173,12 @@ async function workerFixture() {
   async function fire(name, data) { let done; events[name]({ ...data, waitUntil(promise) { done = promise; } }); await done; }
   return { self, fire, notifications, opened };
 }
-test('worker shows a silent, deduplicated notification, never alarm audio', async () => {
+test('worker requests system sound and haptics without starting alarm audio', async () => {
   const { fire, notifications } = await workerFixture();
   await fire('push', { data: { json: () => ({ type: 'forge-rest-timer', id: timerId }) } });
   assert.equal(notifications.length, 1);
-  assert.equal(notifications[0].options.silent, true);
+  assert.equal(notifications[0].options.silent, false);
+  assert.deepEqual(Array.from(notifications[0].options.vibrate), [250, 120, 250]);
   assert.equal(notifications[0].options.renotify, false);
   assert.equal(notifications[0].options.tag, 'forge-timer-' + timerId);
 });

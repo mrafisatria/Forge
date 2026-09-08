@@ -8,11 +8,13 @@ self.addEventListener('push', (event) => {
     try { data = event.data?.json(); } catch { return; }
     if (data?.type !== 'forge-rest-timer' || !/^[0-9a-f-]{36}$/i.test(data.id ?? '')) return;
     // Always display a user-visible notification for Web Push (required by iOS).
-    // Never start audio, even if the page is suspended or another app is playing.
+    // Ask the operating system for its normal notification sound and haptic feedback.
+    // This never starts Forge's looping alarm in the background.
     await self.registration.showNotification('Waktu istirahat selesai', {
       body: 'Siap untuk set berikutnya? Buka Forge untuk melanjutkan.',
       icon: '/apple-icon.png', badge: '/favicon.svg',
-      tag: `forge-timer-${data.id}`, renotify: false, silent: true,
+      tag: `forge-timer-${data.id}`, renotify: false, silent: false,
+      vibrate: [250, 120, 250],
       data: { timerId: data.id },
     });
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });

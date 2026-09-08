@@ -229,7 +229,7 @@ export function RestTimer({ token }: { token: string }) {
         {notificationState === 'denied' && <p>Izin ditolak. Aktifkan notifikasi Forge di pengaturan iPhone/browser, lalu buka ulang Forge.</p>}
       </div>
       {notificationError && <p role="alert" className="rest-timer-inline-error">{notificationError}</p>}
-      <p>Forge terbuka: alarm berbunyi. Saat minimize: notifikasi saja, tanpa alarm. Perlu internet; pengiriman bisa terlambat.</p>
+      <p>Forge terbuka: alarm berbunyi. Saat minimize: suara notifikasi sistem dan getaran jika didukung, tanpa alarm berulang. Perlu internet; pengiriman bisa terlambat.</p>
     </section>}
     {(notificationError || notificationPending) && <p className="rest-timer-warning" role="status">{notificationError || 'Menjadwalkan notifikasi… tunggu sebelum minimize.'}</p>}
     {audioWarning && <p className="rest-timer-warning" role="status">Suara diblokir browser. {countdown?.ringing ? 'Waktu habis—ketuk bulatan.' : 'Mulai ulang timer untuk mengaktifkan suara.'}</p>}
