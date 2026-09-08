@@ -16,16 +16,19 @@ export function clampTimerPosition(x: number, y: number, width: number, height: 
   };
 }
 
-// Three gentle chimes, followed by silence; the audio buffer loops until stopped.
+// Five urgent dual-tone pulses followed by a short pause; the buffer loops until stopped.
 export function alarmSamples(sampleRate: number) {
-  const samples = new Float32Array(Math.ceil(sampleRate * 1.8));
-  for (let pulse = 0; pulse < 3; pulse++) {
-    const start = Math.floor(pulse * 0.3 * sampleRate);
-    const duration = Math.floor(0.18 * sampleRate);
-    const frequency = pulse === 1 ? 1108.73 : 880;
+  const samples = new Float32Array(Math.ceil(sampleRate * 1.55));
+  for (let pulse = 0; pulse < 5; pulse++) {
+    const start = Math.floor(pulse * 0.29 * sampleRate);
+    const duration = Math.floor(0.21 * sampleRate);
+    const frequency = pulse % 2 ? 1046.5 : 880;
     for (let i = 0; i < duration; i++) {
-      const envelope = Math.min(1, i / (sampleRate * 0.01)) * (1 - i / duration) ** 2;
-      samples[start + i] = Math.sin(2 * Math.PI * frequency * i / sampleRate) * envelope * 0.22;
+      const attack = Math.min(1, i / (sampleRate * 0.004));
+      const release = Math.min(1, (duration - i) / (sampleRate * 0.018));
+      const phase = 2 * Math.PI * frequency * i / sampleRate;
+      const dualTone = Math.sin(phase) * 0.68 + Math.sin(phase * 1.5) * 0.32;
+      samples[start + i] = dualTone * attack * release * 0.88;
     }
   }
   return samples;

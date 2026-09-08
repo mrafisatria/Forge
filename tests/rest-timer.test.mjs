@@ -14,10 +14,10 @@ test('five presets, absolute countdown, and bounded orb remain unchanged', () =>
 });
 test('ringtone has bounded samples and pauses between repeats', () => {
   const samples = alarmSamples(8000);
-  assert.equal(samples.length, 14400);
-  assert.ok(samples.some((sample) => Math.abs(sample) > .1));
-  assert.ok(samples.every((sample) => Number.isFinite(sample) && Math.abs(sample) <= .22));
-  assert.ok(samples.slice(8000).every((sample) => sample === 0));
+  assert.equal(samples.length, 12400);
+  assert.ok(samples.some((sample) => Math.abs(sample) > .7));
+  assert.ok(samples.every((sample) => Number.isFinite(sample) && Math.abs(sample) <= .88));
+  assert.ok(samples.slice(10960).every((sample) => sample === 0));
 });
 function fixture() {
   const sources = [];
@@ -26,7 +26,7 @@ function fixture() {
     async resume() { this.resumes++; this.state = 'running'; },
     async close() { this.closes++; this.state = 'closed'; },
     createBuffer(channels, length, rate) {
-      assert.equal(channels, 1); assert.equal(length, 14400); assert.equal(rate, 8000);
+      assert.equal(channels, 1); assert.equal(length, 12400); assert.equal(rate, 8000);
       return { copyToChannel(samples) { assert.equal(samples.length, length); } };
     },
     createBufferSource() {
