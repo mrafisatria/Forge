@@ -153,7 +153,7 @@ h1, h2, h3, p { margin-top: 0; }
 .set-row { width: 100%; min-height: 43px; padding: 0 25px; display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: center; border: 0; border-top: 1px solid #1f2421; color: #dce2de; background: #101311; text-align: left; font-size: 12px; }
 .set-row:nth-child(odd) { background: #151917; }
 .set-row.set-header { min-height: 32px; border-top: 0; color: #66706a; font-size: 8px; font-weight: 900; letter-spacing: .12em; background: #0d100f; }
-.rep-value { color: #fff; font-weight: 800; }.rep-value.below { color: #ff6f67; }.rep-value.above { color: #8fe654; }.rep-value.within { color: #fff; }
+.rep-value { color: #fff; font-weight: 800; }.rep-value.below { color: #ff6f67; }.rep-value.within { color: #8fe654; }.rep-value.above { color: #55b8ff; }
 .empty-state { padding: 50px 20px; border: 1px dashed var(--line-bright); border-radius: 16px; text-align: center; color: var(--muted); }.empty-state h3 { margin: 14px 0 6px; color: var(--white); }.empty-state p { margin: 0; font-size: 12px; }
 
 .modal-shell { position: fixed; inset: 0; z-index: 100; display: grid; place-items: stretch end; }
