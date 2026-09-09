@@ -568,7 +568,7 @@ function RoutineDetail({
           <article className={'exercise-card' + (draggedExerciseId === exercise.id ? ' is-dragging' : '')} key={exercise.id} data-exercise-id={exercise.id}>
             <div className="exercise-title">
               <ExerciseMediaButton url={exercise.image_url} path={exercise.image_path} name={exercise.name} />
-              <div className="exercise-copy"><div className="exercise-kicker"><span>EXERCISE {String(index + 1).padStart(2, '0')}</span>{exercise.target_reps && <span className="target-reps">TARGET {exercise.target_reps}</span>}</div><h3>{exercise.name}</h3></div>
+              <div className="exercise-copy"><div className="exercise-kicker"><span>EXERCISE {String(index + 1).padStart(2, '0')}</span>{exercise.target_reps && <span className="target-reps">TARGET {exercise.target_reps} REP</span>}</div><h3>{exercise.name}</h3></div>
               <div className="exercise-card-actions">
                 <button
                   className="exercise-drag-handle"
@@ -622,7 +622,7 @@ function ExerciseEditCard({ draft, index, saving, onChange, onSave, onCancel }: 
         <MediaChooseButton path={draft.imagePath} url={draft.imageUrl} onSelect={(media) => onChange({ ...draft, imagePath: media?.image_path ?? null, imageUrl: media?.image_url ?? null })} />
         <div className="draft-exercise-fields">
           <label className="field exercise-name"><span>Nama exercise</span><input value={draft.name} onChange={(event) => onChange({ ...draft, name: event.target.value })} placeholder="Nama gerakan" autoFocus /></label>
-          <label className="field target-reps-field"><span>Target Rep</span><input type="text" inputMode="numeric" value={draft.targetReps} onChange={(event) => onChange({ ...draft, targetReps: event.target.value })} placeholder="Contoh: 6-8" maxLength={20} /></label>
+          <label className="field target-reps-field"><span>Target Rep</span><div className="target-reps-input"><input type="text" inputMode="text" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={draft.targetReps} onChange={(event) => onChange({ ...draft, targetReps: event.target.value })} placeholder="Contoh: 6-8" maxLength={20} /><span aria-hidden="true">Rep</span></div></label>
         </div>
       </div>
       <div className="draft-set-header"><span>SET</span><span>KG</span><span>REPS</span><span /></div>
@@ -686,7 +686,7 @@ function RoutineEditor({ draft, setDraft, saving, onClose, onSave }: { draft: Ro
                     <MediaChooseButton path={exercise.imagePath} url={exercise.imageUrl} onSelect={(media) => updateExercise(exerciseIndex, { imagePath: media?.image_path ?? null, imageUrl: media?.image_url ?? null })} />
                     <div className="draft-exercise-fields">
                       <label className="field exercise-name"><span>Exercise {String(exerciseIndex + 1).padStart(2, '0')}</span><input value={exercise.name} onChange={(event) => updateExercise(exerciseIndex, { name: event.target.value })} placeholder="Nama gerakan" /></label>
-                      <label className="field target-reps-field"><span>Target Rep</span><input type="text" inputMode="numeric" value={exercise.targetReps} onChange={(event) => updateExercise(exerciseIndex, { targetReps: event.target.value })} placeholder="Contoh: 6-8" maxLength={20} /></label>
+                      <label className="field target-reps-field"><span>Target Rep</span><div className="target-reps-input"><input type="text" inputMode="text" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={exercise.targetReps} onChange={(event) => updateExercise(exerciseIndex, { targetReps: event.target.value })} placeholder="Contoh: 6-8" maxLength={20} /><span aria-hidden="true">Rep</span></div></label>
                     </div>
                     <button type="button" className="remove-exercise" onClick={() => setDraft({ ...draft, exercises: draft.exercises.filter((_, index) => index !== exerciseIndex) })} aria-label="Hapus exercise"><Trash2 size={17} /></button>
                   </div>
