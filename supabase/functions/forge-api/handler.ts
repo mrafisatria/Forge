@@ -86,7 +86,7 @@ async function login(request: Request, admin: SupabaseClient, fingerprintKey: st
   return json({ session_token: token, expires_at: expiresAt, user: { id: account.account_id, name: 'Rafi' } });
 }
 
-const routineColumns = 'id,name,training_day,note,created_at,gym_exercises(id,name,image_path,sort_order,gym_exercise_sets(id,set_number,weight_kg,reps))';
+const routineColumns = 'id,name,training_day,note,created_at,gym_exercises(id,name,target_reps,image_path,sort_order,gym_exercise_sets(id,set_number,weight_kg,reps))';
 
 async function listRoutines(admin: SupabaseClient, owner: string) {
   const { data, error } = await admin.from('gym_routines').select(routineColumns).eq('user_id', owner).order('created_at', { ascending: false });

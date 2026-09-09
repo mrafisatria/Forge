@@ -50,6 +50,17 @@ function numeric(value: unknown, label: string, max: number, integer: boolean) {
   return value;
 }
 
+function targetReps(value: unknown): string | null {
+  const result = text(value, 'Target Rep', 20);
+  if (!result) return null;
+  const match = result.match(/^(\d{1,5})(?:\s*[-–—]\s*(\d{1,5}))?$/);
+  if (!match) throw new HttpError('Target Rep harus berupa angka atau rentang, misalnya 8 atau 6-8.', 400);
+  const minimum = Number(match[1]);
+  const maximum = Number(match[2] ?? match[1]);
+  if (minimum > 10000 || maximum > 10000 || minimum > maximum) throw new HttpError('Rentang Target Rep tidak valid.', 400);
+  return match[2] ? `${minimum}-${maximum}` : String(minimum);
+}
+
 export function exercises(value: unknown, owner: string, routineId: string) {
   if (!Array.isArray(value) || value.length > 100) throw new HttpError('Maksimal 100 exercise per routine.', 400);
   return value.map((entry, index) => {
@@ -57,6 +68,7 @@ export function exercises(value: unknown, owner: string, routineId: string) {
     if (!Array.isArray(item.sets) || item.sets.length < 1 || item.sets.length > 100) throw new HttpError('Setiap exercise harus memiliki 1–100 set.', 400);
     return {
       name: text(item.name, 'Nama exercise', 120, true)!,
+      target_reps: targetReps(item.target_reps),
       image_path: imagePath(item.image_path, owner, routineId), sort_order: index,
       sets: item.sets.map((entry, setIndex) => {
         const set = object(entry);

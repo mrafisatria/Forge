@@ -31,14 +31,29 @@ try {
   assert.deepEqual(list.data.routines.find((r) => r.id === id).gym_exercises, []);
   console.log('PASS: empty routine stored and reloaded');
   assert.equal((await call('/routines', 'PATCH', { id, name: '__Forge verified__', training_day: 'Senin', note: 'Temporary smoke test' })).status, 200);
-  assert.equal((await call('/routines', 'PUT', { id, exercises: [{ name: 'Test exercise', sets: [{ weight_kg: 2.5, reps: 10 }, { weight_kg: 5.25, reps: 8 }] }] })).status, 200);
+  assert.equal((await call('/routines', 'PUT', { id, exercises: [
+    { name: 'First exercise', target_reps: '6-8', sets: [{ weight_kg: 2.5, reps: 10 }, { weight_kg: 5.25, reps: 8 }] },
+    { name: 'Second exercise', target_reps: '10', sets: [{ weight_kg: 10, reps: 10 }] },
+  ] })).status, 200);
   list = await call('/routines');
   const routine = list.data.routines.find((r) => r.id === id);
   assert.equal(routine.name, '__Forge verified__');
-  assert.equal(routine.gym_exercises[0].gym_exercise_sets.find((s) => s.set_number === 1).weight_kg, 2.5);
-  assert.equal(routine.gym_exercises[0].gym_exercise_sets.find((s) => s.set_number === 2).reps, 8);
+  const first = routine.gym_exercises.find((exercise) => exercise.name === 'First exercise');
+  assert.equal(first.target_reps, '6-8');
+  assert.equal(first.sort_order, 0);
+  assert.equal(first.gym_exercise_sets.find((s) => s.set_number === 1).weight_kg, 2.5);
+  assert.equal(first.gym_exercise_sets.find((s) => s.set_number === 2).reps, 8);
+  assert.equal((await call('/routines', 'PUT', { id, exercises: [
+    { name: 'Second exercise', target_reps: '10', sets: [{ weight_kg: 10, reps: 10 }] },
+    { name: 'First exercise', target_reps: '6-8', sets: [{ weight_kg: 2.5, reps: 8 }] },
+  ] })).status, 200);
+  list = await call('/routines');
+  const reordered = list.data.routines.find((r) => r.id === id).gym_exercises;
+  assert.equal(reordered.find((exercise) => exercise.name === 'Second exercise').sort_order, 0);
+  assert.equal(reordered.find((exercise) => exercise.name === 'First exercise').sort_order, 1);
   assert.equal((await call('/routines', 'PUT', { id, exercises: [{ name: 'Invalid', sets: [{ weight_kg: -1, reps: 10 }] }] })).status, 400);
-  console.log('PASS: routine edit, exercise and decimal KG persisted; invalid data rejected');
+  assert.equal((await call('/routines', 'PUT', { id, exercises: [{ name: 'Invalid target', target_reps: '8-6', sets: [{ weight_kg: 1, reps: 10 }] }] })).status, 400);
+  console.log('PASS: target reps, exercise order, decimal KG and validation persisted');
   for (const table of ['forge_accounts', 'forge_sessions', 'forge_login_attempts', 'gym_routines', 'gym_exercises', 'gym_exercise_sets']) {
     const response = await fetch(`${url}/rest/v1/${table}?select=*&limit=1`, { headers: { apikey: key }, signal: AbortSignal.timeout(15000) });
     assert.ok([401,403].includes(response.status), `Direct access unexpectedly allowed: ${table}`);

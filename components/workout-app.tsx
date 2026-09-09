@@ -7,6 +7,7 @@ import {
   ChevronRight,
   CircleUserRound,
   Dumbbell,
+  GripVertical,
   Images,
   LoaderCircle,
   LogOut,
@@ -17,10 +18,10 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError, apiRequest, isSupabaseConfigured, readSession, rememberSession, sessionStorageKey, type ForgeSession, type RoutinesResponse } from '@/lib/api';
 import type { DraftExercise, DraftSet, Exercise, Routine, RoutineDraft } from '@/lib/types';
-import { sortRoutinesByDay, trainingDays } from '@/lib/routines';
+import { moveExercise, normalizeTargetReps, repTargetTone, sortRoutinesByDay, trainingDays } from '@/lib/routines';
 import { MediaChooseButton, MediaProvider, useMediaLibrary } from './media-library';
 import { ExerciseMediaButton } from './exercise-media-button';
 import { RestTimer } from './rest-timer';
@@ -42,6 +43,7 @@ function newExercise(): DraftExercise {
   return {
     clientId: uid(),
     name: '',
+    targetReps: '',
     imageUrl: null,
     imagePath: null,
     sets: [newSet(0), newSet(1), newSet(2)],
@@ -64,6 +66,7 @@ function draftFromRoutine(routine: Routine): RoutineDraft {
       .map((exercise) => ({
         clientId: exercise.id,
         name: exercise.name,
+        targetReps: exercise.target_reps ?? '',
         imageUrl: exercise.image_url,
         imagePath: exercise.image_path,
         sets: exercise.gym_exercise_sets
@@ -91,6 +94,7 @@ function exerciseToDraft(exercise: Exercise): DraftExercise {
   return {
     clientId: exercise.id,
     name: exercise.name,
+    targetReps: exercise.target_reps ?? '',
     imageUrl: exercise.image_url,
     imagePath: exercise.image_path,
     sets: exercise.gym_exercise_sets
@@ -103,6 +107,7 @@ function exerciseToDraft(exercise: Exercise): DraftExercise {
 function exercisesForRpc(exercises: Exercise[]) {
   return exercises.map((exercise, index) => ({
     name: exercise.name,
+    target_reps: exercise.target_reps,
     image_path: exercise.image_path,
     sort_order: index,
     sets: exercise.gym_exercise_sets.map((set, setIndex) => ({
@@ -262,6 +267,7 @@ export default function WorkoutApp() {
       const routineId = draft.id ?? uid();
       const exercisePayload = draft.id ? undefined : draft.exercises.map((exercise) => ({
           name: exercise.name.trim(),
+          target_reps: normalizeTargetReps(exercise.targetReps),
           image_path: exercise.imagePath,
           sets: exercise.sets.map((set) => ({ weight_kg: parseWeight(set.weightKg), reps: Number(set.reps) || 0 })),
         }));
@@ -286,6 +292,7 @@ export default function WorkoutApp() {
       const previous = routine.gym_exercises.find((exercise) => exercise.id === exerciseId);
       const nextExercise: Exercise = {
         id: exerciseId ?? uid(), name: exerciseDraft.name.trim(), ...image,
+        target_reps: normalizeTargetReps(exerciseDraft.targetReps),
         sort_order: previous?.sort_order ?? routine.gym_exercises.length,
         gym_exercise_sets: exerciseDraft.sets.map((set, index) => ({
           id: previous?.gym_exercise_sets[index]?.id ?? uid(), set_number: index + 1,
@@ -302,6 +309,20 @@ export default function WorkoutApp() {
       setRoutines((current) => current.map((item) => item.id === routine.id ? { ...item, gym_exercises: nextExercises } : item));
       await loadRoutines(session.session_token).catch(() => {});
       showToast(exerciseId ? 'Exercise berhasil diperbarui.' : 'Exercise baru berhasil ditambahkan.');
+      return true;
+    } catch (error) { handleError(error); return false; }
+  }
+
+  async function reorderExercises(routine: Routine, nextExercises: Exercise[]) {
+    if (!session) return false;
+    try {
+      await apiRequest('/routines', {
+        method: 'PUT', token: session.session_token,
+        body: { id: routine.id, exercises: exercisesForRpc(nextExercises) },
+      });
+      setRoutines((current) => current.map((item) => item.id === routine.id ? { ...item, gym_exercises: nextExercises } : item));
+      await loadRoutines(session.session_token).catch(() => {});
+      showToast('Urutan exercise berhasil disimpan.');
       return true;
     } catch (error) { handleError(error); return false; }
   }
@@ -346,7 +367,7 @@ export default function WorkoutApp() {
         </header>
         {loadError && <div className="connection-error" role="alert"><span>{loadError}</span><button className="secondary-button" onClick={() => void loadRoutines(session.session_token).catch(() => {})}>Coba lagi</button></div>}
         {selectedRoutine ? (
-          <RoutineDetail key={selectedRoutine.id} routine={selectedRoutine} onBack={() => setSelectedId(null)} onEditInfo={() => openEditRoutine(selectedRoutine)} onDelete={() => deleteRoutine(selectedRoutine)} onSaveExercise={saveExercise} onDeleteExercise={deleteExercise} />
+          <RoutineDetail key={selectedRoutine.id} routine={selectedRoutine} onBack={() => setSelectedId(null)} onEditInfo={() => openEditRoutine(selectedRoutine)} onDelete={() => deleteRoutine(selectedRoutine)} onSaveExercise={saveExercise} onDeleteExercise={deleteExercise} onReorderExercises={reorderExercises} />
         ) : (
           <RoutineOverview routines={routines} loading={loading} onCreate={openNewRoutine} onOpen={setSelectedId} />
         )}
@@ -424,6 +445,7 @@ function RoutineDetail({
   onDelete,
   onSaveExercise,
   onDeleteExercise,
+  onReorderExercises,
 }: {
   routine: Routine;
   onBack: () => void;
@@ -431,12 +453,85 @@ function RoutineDetail({
   onDelete: () => void;
   onSaveExercise: (routine: Routine, draft: DraftExercise, exerciseId: string | null) => Promise<boolean>;
   onDeleteExercise: (routine: Routine, exercise: Exercise) => Promise<boolean>;
+  onReorderExercises: (routine: Routine, exercises: Exercise[]) => Promise<boolean>;
 }) {
   const [menuExerciseId, setMenuExerciseId] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ exerciseId: string | null; draft: DraftExercise } | null>(null);
   const [savingExercise, setSavingExercise] = useState(false);
+  const [reordering, setReordering] = useState(false);
+  const [draggedExerciseId, setDraggedExerciseId] = useState<string | null>(null);
+  const [orderedExercises, setOrderedExercises] = useState<Exercise[] | null>(null);
+  const displayedExercises = orderedExercises ?? routine.gym_exercises;
+  const orderedExercisesRef = useRef(routine.gym_exercises);
+  const dragRef = useRef<{ id: string; pointerId: number; initialIds: string[] } | null>(null);
   const totalSets = routine.gym_exercises.reduce((sum, exercise) => sum + exercise.gym_exercise_sets.length, 0);
   const totalVolume = routine.gym_exercises.reduce((sum, exercise) => sum + exercise.gym_exercise_sets.reduce((sub, set) => sub + set.weight_kg * set.reps, 0), 0);
+
+  function setExerciseOrder(exercises: Exercise[]) {
+    orderedExercisesRef.current = exercises;
+    setOrderedExercises(exercises);
+  }
+
+  function startDragging(event: ReactPointerEvent<HTMLButtonElement>, exerciseId: string) {
+    if (editing || reordering) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    orderedExercisesRef.current = displayedExercises;
+    dragRef.current = { id: exerciseId, pointerId: event.pointerId, initialIds: displayedExercises.map((exercise) => exercise.id) };
+    setDraggedExerciseId(exerciseId);
+    setMenuExerciseId(null);
+  }
+
+  function moveDragging(event: ReactPointerEvent<HTMLButtonElement>) {
+    const active = dragRef.current;
+    if (!active || active.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    const target = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
+    const overId = target?.closest<HTMLElement>('[data-exercise-id]')?.dataset.exerciseId;
+    if (!overId || overId === active.id) return;
+    const next = moveExercise(orderedExercisesRef.current, active.id, overId);
+    if (next !== orderedExercisesRef.current) setExerciseOrder(next);
+  }
+
+  async function finishDragging(event: ReactPointerEvent<HTMLButtonElement>) {
+    const active = dragRef.current;
+    if (!active || active.pointerId !== event.pointerId) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    dragRef.current = null;
+    setDraggedExerciseId(null);
+    const next = orderedExercisesRef.current;
+    if (active.initialIds.join('|') === next.map((exercise) => exercise.id).join('|')) return;
+    setReordering(true);
+    const saved = await onReorderExercises(routine, next);
+    setReordering(false);
+    setOrderedExercises(null);
+    if (!saved) orderedExercisesRef.current = routine.gym_exercises;
+  }
+
+  function cancelDragging(event: ReactPointerEvent<HTMLButtonElement>) {
+    const active = dragRef.current;
+    if (!active || active.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    setDraggedExerciseId(null);
+    setOrderedExercises(null);
+    orderedExercisesRef.current = routine.gym_exercises;
+  }
+
+  async function moveWithKeyboard(event: ReactKeyboardEvent<HTMLButtonElement>, exerciseId: string) {
+    if (!['ArrowUp', 'ArrowDown'].includes(event.key) || editing || reordering) return;
+    event.preventDefault();
+    const current = displayedExercises;
+    const index = current.findIndex((exercise) => exercise.id === exerciseId);
+    const destination = event.key === 'ArrowUp' ? index - 1 : index + 1;
+    if (index < 0 || destination < 0 || destination >= current.length) return;
+    const next = moveExercise(current, exerciseId, current[destination].id);
+    setExerciseOrder(next);
+    setReordering(true);
+    const saved = await onReorderExercises(routine, next);
+    setReordering(false);
+    setOrderedExercises(null);
+    if (!saved) orderedExercisesRef.current = routine.gym_exercises;
+  }
 
   async function commitExercise() {
     if (!editing) return;
@@ -467,34 +562,48 @@ function RoutineDetail({
       <div className="exercise-heading"><div><p className="eyebrow">ROUTINE PLAN</p><h2>Exercises</h2></div><button onClick={() => { setEditing({ exerciseId: null, draft: newExercise() }); setMenuExerciseId(null); }} disabled={Boolean(editing)}><Plus size={15} /> Add exercise</button></div>
 
       <div className="exercise-list">
-        {routine.gym_exercises.map((exercise, index) => editing?.exerciseId === exercise.id ? (
+        {displayedExercises.map((exercise, index) => editing?.exerciseId === exercise.id ? (
           <ExerciseEditCard key={exercise.id} draft={editing.draft} index={index} saving={savingExercise} onChange={(draft) => setEditing({ exerciseId: exercise.id, draft })} onSave={commitExercise} onCancel={() => setEditing(null)} />
         ) : (
-          <article className="exercise-card" key={exercise.id}>
+          <article className={'exercise-card' + (draggedExerciseId === exercise.id ? ' is-dragging' : '')} key={exercise.id} data-exercise-id={exercise.id}>
             <div className="exercise-title">
               <ExerciseMediaButton url={exercise.image_url} path={exercise.image_path} name={exercise.name} />
-              <div><span>EXERCISE {String(index + 1).padStart(2, '0')}</span><h3>{exercise.name}</h3></div>
-              <div className="exercise-menu-wrap">
-                <button className="exercise-menu-trigger" onClick={() => setMenuExerciseId((current) => current === exercise.id ? null : exercise.id)} aria-label={`Menu ${exercise.name}`} aria-expanded={menuExerciseId === exercise.id}><MoreHorizontal size={20} /></button>
-                {menuExerciseId === exercise.id && (
-                  <div className="exercise-menu">
-                    <button onClick={() => { setEditing({ exerciseId: exercise.id, draft: exerciseToDraft(exercise) }); setMenuExerciseId(null); }}><Pencil size={14} /> Edit</button>
-                    <button className="danger" onClick={() => removeExercise(exercise)}><Trash2 size={14} /> Hapus</button>
-                  </div>
-                )}
+              <div className="exercise-copy"><div className="exercise-kicker"><span>EXERCISE {String(index + 1).padStart(2, '0')}</span>{exercise.target_reps && <span className="target-reps">TARGET {exercise.target_reps}</span>}</div><h3>{exercise.name}</h3></div>
+              <div className="exercise-card-actions">
+                <button
+                  className="exercise-drag-handle"
+                  type="button"
+                  aria-label={`Geser urutan ${exercise.name}. Gunakan drag atau tombol panah atas dan bawah.`}
+                  aria-grabbed={draggedExerciseId === exercise.id}
+                  disabled={Boolean(editing) || reordering}
+                  onPointerDown={(event) => startDragging(event, exercise.id)}
+                  onPointerMove={moveDragging}
+                  onPointerUp={finishDragging}
+                  onPointerCancel={cancelDragging}
+                  onKeyDown={(event) => void moveWithKeyboard(event, exercise.id)}
+                ><GripVertical size={19} /></button>
+                <div className="exercise-menu-wrap">
+                  <button className="exercise-menu-trigger" onClick={() => setMenuExerciseId((current) => current === exercise.id ? null : exercise.id)} aria-label={`Menu ${exercise.name}`} aria-expanded={menuExerciseId === exercise.id}><MoreHorizontal size={20} /></button>
+                  {menuExerciseId === exercise.id && (
+                    <div className="exercise-menu">
+                      <button onClick={() => { setEditing({ exerciseId: exercise.id, draft: exerciseToDraft(exercise) }); setMenuExerciseId(null); }}><Pencil size={14} /> Edit</button>
+                      <button className="danger" onClick={() => removeExercise(exercise)}><Trash2 size={14} /> Hapus</button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             <div className="sets-table">
               <div className="set-row set-header"><span>SET</span><span>KG</span><span>REPS</span></div>
               {exercise.gym_exercise_sets.map((set) => (
                 <div className="set-row" key={set.id}>
-                  <span>{set.set_number}</span><span>{set.weight_kg}</span><span>{set.reps}</span>
+                  <span>{set.set_number}</span><span>{set.weight_kg}</span><span className={'rep-value ' + (repTargetTone(set.reps, exercise.target_reps) ?? '')}>{set.reps}</span>
                 </div>
               ))}
             </div>
           </article>
         ))}
-        {editing?.exerciseId === null && <ExerciseEditCard draft={editing.draft} index={routine.gym_exercises.length} saving={savingExercise} onChange={(draft) => setEditing({ exerciseId: null, draft })} onSave={commitExercise} onCancel={() => setEditing(null)} />}
+        {editing?.exerciseId === null && <ExerciseEditCard draft={editing.draft} index={displayedExercises.length} saving={savingExercise} onChange={(draft) => setEditing({ exerciseId: null, draft })} onSave={commitExercise} onCancel={() => setEditing(null)} />}
         {!routine.gym_exercises.length && !editing && <div className="empty-state"><Dumbbell size={28} /><h3>Belum ada exercise</h3><p>Tekan Add exercise untuk menambahkan gerakan pertama.</p></div>}
       </div>
     </section>
@@ -511,7 +620,10 @@ function ExerciseEditCard({ draft, index, saving, onChange, onSave, onCancel }: 
       <div className="inline-editor-label"><span>{draft.clientId && draft.name ? 'EDIT EXERCISE' : 'NEW EXERCISE'}</span><strong>Exercise {String(index + 1).padStart(2, '0')}</strong></div>
       <div className="draft-exercise-top">
         <MediaChooseButton path={draft.imagePath} url={draft.imageUrl} onSelect={(media) => onChange({ ...draft, imagePath: media?.image_path ?? null, imageUrl: media?.image_url ?? null })} />
-        <label className="field exercise-name"><span>Nama exercise</span><input value={draft.name} onChange={(event) => onChange({ ...draft, name: event.target.value })} placeholder="Nama gerakan" autoFocus /></label>
+        <div className="draft-exercise-fields">
+          <label className="field exercise-name"><span>Nama exercise</span><input value={draft.name} onChange={(event) => onChange({ ...draft, name: event.target.value })} placeholder="Nama gerakan" autoFocus /></label>
+          <label className="field target-reps-field"><span>Target Rep</span><input type="text" inputMode="numeric" value={draft.targetReps} onChange={(event) => onChange({ ...draft, targetReps: event.target.value })} placeholder="Contoh: 6-8" maxLength={20} /></label>
+        </div>
       </div>
       <div className="draft-set-header"><span>SET</span><span>KG</span><span>REPS</span><span /></div>
       {draft.sets.map((set, setIndex) => (
@@ -572,7 +684,10 @@ function RoutineEditor({ draft, setDraft, saving, onClose, onSave }: { draft: Ro
                 <article className="draft-exercise" key={exercise.clientId}>
                   <div className="draft-exercise-top">
                     <MediaChooseButton path={exercise.imagePath} url={exercise.imageUrl} onSelect={(media) => updateExercise(exerciseIndex, { imagePath: media?.image_path ?? null, imageUrl: media?.image_url ?? null })} />
-                    <label className="field exercise-name"><span>Exercise {String(exerciseIndex + 1).padStart(2, '0')}</span><input value={exercise.name} onChange={(event) => updateExercise(exerciseIndex, { name: event.target.value })} placeholder="Nama gerakan" /></label>
+                    <div className="draft-exercise-fields">
+                      <label className="field exercise-name"><span>Exercise {String(exerciseIndex + 1).padStart(2, '0')}</span><input value={exercise.name} onChange={(event) => updateExercise(exerciseIndex, { name: event.target.value })} placeholder="Nama gerakan" /></label>
+                      <label className="field target-reps-field"><span>Target Rep</span><input type="text" inputMode="numeric" value={exercise.targetReps} onChange={(event) => updateExercise(exerciseIndex, { targetReps: event.target.value })} placeholder="Contoh: 6-8" maxLength={20} /></label>
+                    </div>
                     <button type="button" className="remove-exercise" onClick={() => setDraft({ ...draft, exercises: draft.exercises.filter((_, index) => index !== exerciseIndex) })} aria-label="Hapus exercise"><Trash2 size={17} /></button>
                   </div>
                   <div className="draft-set-header"><span>SET</span><span>KG</span><span>REPS</span><span /> </div>

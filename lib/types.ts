@@ -8,6 +8,7 @@ export type WorkoutSet = {
 export type Exercise = {
   id: string;
   name: string;
+  target_reps: string | null;
   image_url: string | null;
   image_path: string | null;
   sort_order: number;
@@ -32,6 +33,7 @@ export type DraftSet = {
 export type DraftExercise = {
   clientId: string;
   name: string;
+  targetReps: string;
   imageUrl: string | null;
   imagePath: string | null;
   sets: DraftSet[];

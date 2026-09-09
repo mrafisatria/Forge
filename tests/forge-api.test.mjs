@@ -181,9 +181,11 @@ test('exercise replacement does not accept routine metadata', async () => {
   assert.equal(state.writes[0].p_name, null);
 });
 
-test('validation allows decimal kg and rejects invalid reps, images, and oversized lists', () => {
-  const input = [{ name: 'Bench', sets: [{ weight_kg: 2.5, reps: 10 }] }];
+test('validation allows target ranges and decimal kg, and rejects invalid exercise data', () => {
+  const input = [{ name: 'Bench', target_reps: ' 6–8 ', sets: [{ weight_kg: 2.5, reps: 10 }] }];
+  assert.equal(exercises(input, owner, routineId)[0].target_reps, '6-8');
   assert.equal(exercises(input, owner, routineId)[0].sets[0].weight_kg, 2.5);
+  for (const target_reps of ['8-6', 'six-eight', '1-10001', 8]) assert.throws(() => exercises([{ ...input[0], target_reps }], owner, routineId));
   for (const kg of [-1, Infinity, NaN, 2.555, '2,5']) assert.throws(() => exercises([{ ...input[0], sets: [{ weight_kg: kg, reps: 10 }] }], owner, routineId));
   assert.throws(() => exercises([{ ...input[0], sets: [{ weight_kg: 5, reps: 2.5 }] }], owner, routineId));
   assert.throws(() => exercises([{ name: 'Bench', sets: [] }], owner, routineId));
