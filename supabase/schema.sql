@@ -43,6 +43,7 @@ create table if not exists public.gym_exercises (
   user_id uuid not null,
   name text not null check (char_length(trim(name)) between 1 and 120),
   target_reps text check (char_length(trim(target_reps)) between 1 and 20),
+  is_hidden boolean not null default false,
   image_path text,
   sort_order integer not null default 0 check (sort_order >= 0),
   unique(id, user_id),
@@ -156,8 +157,8 @@ begin
   for v_exercise in select value from jsonb_array_elements(p_exercises) loop
     if jsonb_typeof(v_exercise->'sets') is distinct from 'array' then raise exception 'Invalid sets'; end if;
     if jsonb_array_length(v_exercise->'sets') not between 1 and 100 then raise exception 'Invalid set count'; end if;
-    insert into public.gym_exercises(routine_id, user_id, name, target_reps, image_path, sort_order)
-    values(p_routine_id, p_user_id, v_exercise->>'name', v_exercise->>'target_reps', v_exercise->>'image_path', (v_exercise->>'sort_order')::integer)
+    insert into public.gym_exercises(routine_id, user_id, name, target_reps, is_hidden, image_path, sort_order)
+    values(p_routine_id, p_user_id, v_exercise->>'name', v_exercise->>'target_reps', coalesce((v_exercise->>'is_hidden')::boolean, false), v_exercise->>'image_path', (v_exercise->>'sort_order')::integer)
     returning id into v_exercise_id;
     for v_set in select value from jsonb_array_elements(v_exercise->'sets') loop
       insert into public.gym_exercise_sets(exercise_id, user_id, set_number, weight_kg, reps)

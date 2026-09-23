@@ -7,6 +7,8 @@ import {
   ChevronRight,
   CircleUserRound,
   Dumbbell,
+  Eye,
+  EyeOff,
   GripVertical,
   Images,
   LoaderCircle,
@@ -44,6 +46,7 @@ function newExercise(): DraftExercise {
     clientId: uid(),
     name: '',
     targetReps: '',
+    isHidden: false,
     imageUrl: null,
     imagePath: null,
     sets: [newSet(0), newSet(1), newSet(2)],
@@ -67,6 +70,7 @@ function draftFromRoutine(routine: Routine): RoutineDraft {
         clientId: exercise.id,
         name: exercise.name,
         targetReps: exercise.target_reps ?? '',
+        isHidden: exercise.is_hidden ?? false,
         imageUrl: exercise.image_url,
         imagePath: exercise.image_path,
         sets: exercise.gym_exercise_sets
@@ -85,9 +89,14 @@ function normalizeRoutine(routine: Routine): Routine {
       .sort((a, b) => a.sort_order - b.sort_order)
       .map((exercise) => ({
         ...exercise,
+        is_hidden: exercise.is_hidden ?? false,
         gym_exercise_sets: (exercise.gym_exercise_sets ?? []).slice().sort((a, b) => a.set_number - b.set_number),
       })),
   };
+}
+
+function visibleExercises(routine: Routine) {
+  return routine.gym_exercises.filter((exercise) => !exercise.is_hidden);
 }
 
 function exerciseToDraft(exercise: Exercise): DraftExercise {
@@ -95,6 +104,7 @@ function exerciseToDraft(exercise: Exercise): DraftExercise {
     clientId: exercise.id,
     name: exercise.name,
     targetReps: exercise.target_reps ?? '',
+    isHidden: exercise.is_hidden ?? false,
     imageUrl: exercise.image_url,
     imagePath: exercise.image_path,
     sets: exercise.gym_exercise_sets
@@ -108,6 +118,7 @@ function exercisesForRpc(exercises: Exercise[]) {
   return exercises.map((exercise, index) => ({
     name: exercise.name,
     target_reps: exercise.target_reps,
+    is_hidden: exercise.is_hidden,
     image_path: exercise.image_path,
     sort_order: index,
     sets: exercise.gym_exercise_sets.map((set, setIndex) => ({
@@ -268,6 +279,7 @@ export default function WorkoutApp() {
       const exercisePayload = draft.id ? undefined : draft.exercises.map((exercise) => ({
           name: exercise.name.trim(),
           target_reps: normalizeTargetReps(exercise.targetReps),
+          is_hidden: exercise.isHidden,
           image_path: exercise.imagePath,
           sets: exercise.sets.map((set) => ({ weight_kg: parseWeight(set.weightKg), reps: Number(set.reps) || 0 })),
         }));
@@ -293,6 +305,7 @@ export default function WorkoutApp() {
       const nextExercise: Exercise = {
         id: exerciseId ?? uid(), name: exerciseDraft.name.trim(), ...image,
         target_reps: normalizeTargetReps(exerciseDraft.targetReps),
+        is_hidden: previous?.is_hidden ?? false,
         sort_order: previous?.sort_order ?? routine.gym_exercises.length,
         gym_exercise_sets: exerciseDraft.sets.map((set, index) => ({
           id: previous?.gym_exercise_sets[index]?.id ?? uid(), set_number: index + 1,
@@ -316,13 +329,31 @@ export default function WorkoutApp() {
   async function reorderExercises(routine: Routine, nextExercises: Exercise[]) {
     if (!session) return false;
     try {
+      const hiddenExercises = routine.gym_exercises.filter((exercise) => exercise.is_hidden);
+      const allExercises = [...nextExercises, ...hiddenExercises];
       await apiRequest('/routines', {
         method: 'PUT', token: session.session_token,
-        body: { id: routine.id, exercises: exercisesForRpc(nextExercises) },
+        body: { id: routine.id, exercises: exercisesForRpc(allExercises) },
       });
-      setRoutines((current) => current.map((item) => item.id === routine.id ? { ...item, gym_exercises: nextExercises } : item));
+      setRoutines((current) => current.map((item) => item.id === routine.id ? { ...item, gym_exercises: allExercises } : item));
       await loadRoutines(session.session_token).catch(() => {});
       showToast('Urutan exercise berhasil disimpan.');
+      return true;
+    } catch (error) { handleError(error); return false; }
+  }
+
+  async function setExerciseHidden(routine: Routine, exercise: Exercise, isHidden: boolean) {
+    if (!session) return false;
+    try {
+      await apiRequest('/routines', {
+        method: 'PATCH', token: session.session_token,
+        body: { id: routine.id, exercise_id: exercise.id, is_hidden: isHidden },
+      });
+      setRoutines((current) => current.map((item) => item.id === routine.id ? {
+        ...item,
+        gym_exercises: item.gym_exercises.map((entry) => entry.id === exercise.id ? { ...entry, is_hidden: isHidden } : entry),
+      } : item));
+      showToast(isHidden ? 'Exercise disembunyikan.' : 'Exercise ditampilkan kembali.');
       return true;
     } catch (error) { handleError(error); return false; }
   }
@@ -367,12 +398,16 @@ export default function WorkoutApp() {
         </header>
         {loadError && <div className="connection-error" role="alert"><span>{loadError}</span><button className="secondary-button" onClick={() => void loadRoutines(session.session_token).catch(() => {})}>Coba lagi</button></div>}
         {selectedRoutine ? (
-          <RoutineDetail key={selectedRoutine.id} routine={selectedRoutine} onBack={() => setSelectedId(null)} onEditInfo={() => openEditRoutine(selectedRoutine)} onDelete={() => deleteRoutine(selectedRoutine)} onSaveExercise={saveExercise} onDeleteExercise={deleteExercise} onReorderExercises={reorderExercises} />
+          <RoutineDetail key={selectedRoutine.id} routine={selectedRoutine} onBack={() => setSelectedId(null)} onEditInfo={() => openEditRoutine(selectedRoutine)} onDelete={() => deleteRoutine(selectedRoutine)} onSaveExercise={saveExercise} onDeleteExercise={deleteExercise} onSetExerciseHidden={setExerciseHidden} onReorderExercises={reorderExercises} />
         ) : (
           <RoutineOverview routines={routines} loading={loading} onCreate={openNewRoutine} onOpen={setSelectedId} />
         )}
       </section>
-      {editorOpen && draft && <RoutineEditor draft={draft} setDraft={setDraft} saving={saving} onClose={() => setEditorOpen(false)} onSave={saveRoutine} />}
+      {editorOpen && draft && <RoutineEditor draft={draft} setDraft={setDraft} saving={saving} onClose={() => setEditorOpen(false)} onSave={saveRoutine} onShowExercise={async (exerciseId) => {
+        const routine = routines.find((item) => item.id === draft.id);
+        const exercise = routine?.gym_exercises.find((item) => item.id === exerciseId);
+        return routine && exercise ? setExerciseHidden(routine, exercise, false) : false;
+      }} />}
       {toast && <div className="toast" role="status"><Check size={17} />{toast}</div>}
       <RestTimer token={session.session_token} />
     </main>
@@ -399,8 +434,8 @@ function Sidebar({ open, onClose, onSignOut }: { open: boolean; onClose: () => v
 
 function RoutineOverview({ routines, loading, onCreate, onOpen }: { routines: Routine[]; loading: boolean; onCreate: () => void; onOpen: (id: string) => void }) {
   const sortedRoutines = useMemo(() => sortRoutinesByDay(routines), [routines]);
-  const exerciseCount = routines.reduce((total, routine) => total + routine.gym_exercises.length, 0);
-  const setCount = routines.reduce((total, routine) => total + routine.gym_exercises.reduce((sum, exercise) => sum + exercise.gym_exercise_sets.length, 0), 0);
+  const exerciseCount = routines.reduce((total, routine) => total + visibleExercises(routine).length, 0);
+  const setCount = routines.reduce((total, routine) => total + visibleExercises(routine).reduce((sum, exercise) => sum + exercise.gym_exercise_sets.length, 0), 0);
 
   return (
     <>
@@ -419,18 +454,19 @@ function RoutineOverview({ routines, loading, onCreate, onOpen }: { routines: Ro
         <div className="routine-grid">{[1, 2, 3].map((item) => <div className="routine-card skeleton" key={item} />)}</div>
       ) : (
         <div className="routine-grid">
-          {sortedRoutines.map((routine, index) => (
-            <article className="routine-card" key={routine.id}>
+          {sortedRoutines.map((routine, index) => {
+            const exercises = visibleExercises(routine);
+            return <article className="routine-card" key={routine.id}>
               <div className={`routine-icon tone-${index % 3}`}><Dumbbell size={22} /></div>
               <span className="day">{routine.training_day || 'Fleksibel'}</span>
               <h3>{routine.name}</h3>
-              <p>{routine.gym_exercises.length ? routine.gym_exercises.map((exercise) => exercise.name).join(', ') : 'Belum ada exercise'}</p>
+              <p>{exercises.length ? exercises.map((exercise) => exercise.name).join(', ') : 'Belum ada exercise'}</p>
               <div className="card-footer">
-                <span>{routine.gym_exercises.length} exercise · {routine.gym_exercises.reduce((sum, exercise) => sum + exercise.gym_exercise_sets.length, 0)} sets</span>
+                <span>{exercises.length} exercise · {exercises.reduce((sum, exercise) => sum + exercise.gym_exercise_sets.length, 0)} sets</span>
                 <button onClick={() => onOpen(routine.id)}>Open <ArrowUpRight size={14} /></button>
               </div>
-            </article>
-          ))}
+            </article>;
+          })}
           <button className="add-card" onClick={onCreate}><span><Plus size={22} /></span><strong>Buat routine baru</strong><small>Susun latihan sesuai targetmu</small></button>
         </div>
       )}
@@ -445,6 +481,7 @@ function RoutineDetail({
   onDelete,
   onSaveExercise,
   onDeleteExercise,
+  onSetExerciseHidden,
   onReorderExercises,
 }: {
   routine: Routine;
@@ -453,6 +490,7 @@ function RoutineDetail({
   onDelete: () => void;
   onSaveExercise: (routine: Routine, draft: DraftExercise, exerciseId: string | null) => Promise<boolean>;
   onDeleteExercise: (routine: Routine, exercise: Exercise) => Promise<boolean>;
+  onSetExerciseHidden: (routine: Routine, exercise: Exercise, isHidden: boolean) => Promise<boolean>;
   onReorderExercises: (routine: Routine, exercises: Exercise[]) => Promise<boolean>;
 }) {
   const [menuExerciseId, setMenuExerciseId] = useState<string | null>(null);
@@ -461,11 +499,12 @@ function RoutineDetail({
   const [reordering, setReordering] = useState(false);
   const [draggedExerciseId, setDraggedExerciseId] = useState<string | null>(null);
   const [orderedExercises, setOrderedExercises] = useState<Exercise[] | null>(null);
-  const displayedExercises = orderedExercises ?? routine.gym_exercises;
-  const orderedExercisesRef = useRef(routine.gym_exercises);
+  const currentVisibleExercises = visibleExercises(routine);
+  const displayedExercises = orderedExercises ?? currentVisibleExercises;
+  const orderedExercisesRef = useRef(currentVisibleExercises);
   const dragRef = useRef<{ id: string; pointerId: number; initialIds: string[] } | null>(null);
-  const totalSets = routine.gym_exercises.reduce((sum, exercise) => sum + exercise.gym_exercise_sets.length, 0);
-  const totalVolume = routine.gym_exercises.reduce((sum, exercise) => sum + exercise.gym_exercise_sets.reduce((sub, set) => sub + set.weight_kg * set.reps, 0), 0);
+  const totalSets = currentVisibleExercises.reduce((sum, exercise) => sum + exercise.gym_exercise_sets.length, 0);
+  const totalVolume = currentVisibleExercises.reduce((sum, exercise) => sum + exercise.gym_exercise_sets.reduce((sub, set) => sub + set.weight_kg * set.reps, 0), 0);
 
   function setExerciseOrder(exercises: Exercise[]) {
     orderedExercisesRef.current = exercises;
@@ -505,7 +544,7 @@ function RoutineDetail({
     const saved = await onReorderExercises(routine, next);
     setReordering(false);
     setOrderedExercises(null);
-    if (!saved) orderedExercisesRef.current = routine.gym_exercises;
+    if (!saved) orderedExercisesRef.current = currentVisibleExercises;
   }
 
   function cancelDragging(event: ReactPointerEvent<HTMLButtonElement>) {
@@ -514,7 +553,7 @@ function RoutineDetail({
     dragRef.current = null;
     setDraggedExerciseId(null);
     setOrderedExercises(null);
-    orderedExercisesRef.current = routine.gym_exercises;
+    orderedExercisesRef.current = currentVisibleExercises;
   }
 
   async function moveWithKeyboard(event: ReactKeyboardEvent<HTMLButtonElement>, exerciseId: string) {
@@ -530,7 +569,7 @@ function RoutineDetail({
     const saved = await onReorderExercises(routine, next);
     setReordering(false);
     setOrderedExercises(null);
-    if (!saved) orderedExercisesRef.current = routine.gym_exercises;
+    if (!saved) orderedExercisesRef.current = currentVisibleExercises;
   }
 
   async function commitExercise() {
@@ -546,15 +585,20 @@ function RoutineDetail({
     await onDeleteExercise(routine, exercise);
   }
 
+  async function hideExercise(exercise: Exercise) {
+    setMenuExerciseId(null);
+    await onSetExerciseHidden(routine, exercise, true);
+  }
+
   return (
     <section className="detail-view">
       <div className="detail-actions">
         <button className="back-button" onClick={onBack}><ArrowLeft size={18} /> Semua routine</button>
-        <div><button className="icon-action" onClick={onEditInfo} aria-label="Edit deskripsi routine"><Pencil size={17} /></button><button className="icon-action danger" onClick={onDelete} aria-label="Hapus routine"><Trash2 size={17} /></button></div>
+        <div><button className="icon-action" onClick={onEditInfo} aria-label="Edit routine"><Pencil size={17} /></button><button className="icon-action danger" onClick={onDelete} aria-label="Hapus routine"><Trash2 size={17} /></button></div>
       </div>
 
       <div className="detail-stats">
-        <article><span>EXERCISE</span><strong>{routine.gym_exercises.length}</strong></article>
+        <article><span>EXERCISE</span><strong>{currentVisibleExercises.length}</strong></article>
         <article><span>TOTAL SET</span><strong>{totalSets}</strong></article>
         <article><span>EST. VOLUME</span><strong>{totalVolume.toLocaleString('id-ID')} <small>kg</small></strong></article>
       </div>
@@ -587,6 +631,7 @@ function RoutineDetail({
                   {menuExerciseId === exercise.id && (
                     <div className="exercise-menu">
                       <button onClick={() => { setEditing({ exerciseId: exercise.id, draft: exerciseToDraft(exercise) }); setMenuExerciseId(null); }}><Pencil size={14} /> Edit</button>
+                      <button onClick={() => void hideExercise(exercise)}><EyeOff size={14} /> Hide</button>
                       <button className="danger" onClick={() => removeExercise(exercise)}><Trash2 size={14} /> Hapus</button>
                     </div>
                   )}
@@ -604,7 +649,7 @@ function RoutineDetail({
           </article>
         ))}
         {editing?.exerciseId === null && <ExerciseEditCard draft={editing.draft} index={displayedExercises.length} saving={savingExercise} onChange={(draft) => setEditing({ exerciseId: null, draft })} onSave={commitExercise} onCancel={() => setEditing(null)} />}
-        {!routine.gym_exercises.length && !editing && <div className="empty-state"><Dumbbell size={28} /><h3>Belum ada exercise</h3><p>Tekan Add exercise untuk menambahkan gerakan pertama.</p></div>}
+        {!currentVisibleExercises.length && !editing && <div className="empty-state"><Dumbbell size={28} /><h3>{routine.gym_exercises.length ? 'Semua exercise disembunyikan' : 'Belum ada exercise'}</h3><p>{routine.gym_exercises.length ? 'Buka Edit routine untuk menampilkannya kembali.' : 'Tekan Add exercise untuk menambahkan gerakan pertama.'}</p></div>}
       </div>
     </section>
   );
@@ -640,7 +685,10 @@ function ExerciseEditCard({ draft, index, saving, onChange, onSave, onCancel }: 
   );
 }
 
-function RoutineEditor({ draft, setDraft, saving, onClose, onSave }: { draft: RoutineDraft; setDraft: (draft: RoutineDraft) => void; saving: boolean; onClose: () => void; onSave: (event: FormEvent) => void }) {
+function RoutineEditor({ draft, setDraft, saving, onClose, onSave, onShowExercise }: { draft: RoutineDraft; setDraft: (draft: RoutineDraft) => void; saving: boolean; onClose: () => void; onSave: (event: FormEvent) => void; onShowExercise: (exerciseId: string) => Promise<boolean> }) {
+  const [visibilitySavingId, setVisibilitySavingId] = useState<string | null>(null);
+  const hiddenExercises = draft.exercises.map((exercise, index) => ({ exercise, index })).filter(({ exercise }) => exercise.isHidden);
+
   function updateExercise(exerciseIndex: number, changes: Partial<DraftExercise>) {
     setDraft({ ...draft, exercises: draft.exercises.map((exercise, index) => index === exerciseIndex ? { ...exercise, ...changes } : exercise) });
   }
@@ -650,11 +698,19 @@ function RoutineEditor({ draft, setDraft, saving, onClose, onSave }: { draft: Ro
     updateExercise(exerciseIndex, { sets: exercise.sets.map((set, index) => index === setIndex ? { ...set, ...changes } : set) });
   }
 
+  async function showExercise(exerciseIndex: number) {
+    const exercise = draft.exercises[exerciseIndex];
+    setVisibilitySavingId(exercise.clientId);
+    const saved = await onShowExercise(exercise.clientId);
+    setVisibilitySavingId(null);
+    if (saved) updateExercise(exerciseIndex, { isHidden: false });
+  }
+
   return (
     <div className="modal-shell" role="dialog" aria-modal="true" aria-label={draft.id ? 'Edit routine' : 'Routine baru'}>
       <button className="modal-backdrop" onClick={onClose} aria-label="Tutup" />
       <form className="editor" onSubmit={onSave}>
-        <header><div><p className="eyebrow">{draft.id ? 'ROUTINE DETAILS' : 'ROUTINE BUILDER'}</p><h2>{draft.id ? 'Edit deskripsi routine' : 'Routine baru'}</h2></div><button type="button" className="close-button" onClick={onClose}><X size={20} /></button></header>
+        <header><div><p className="eyebrow">{draft.id ? 'ROUTINE DETAILS' : 'ROUTINE BUILDER'}</p><h2>{draft.id ? 'Edit routine' : 'Routine baru'}</h2></div><button type="button" className="close-button" onClick={onClose}><X size={20} /></button></header>
         <div className="editor-body">
           <div className="form-grid">
             <label className="field wide"><span>Nama routine</span><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Contoh: Chest + Back" autoFocus /></label>
@@ -669,6 +725,23 @@ function RoutineEditor({ draft, setDraft, saving, onClose, onSave }: { draft: Ro
             </label>
             <label className="field"><span>Catatan</span><input value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="Target atau fokus latihan" /></label>
           </div>
+
+          {draft.id && hiddenExercises.length > 0 && (
+            <section className="hidden-exercises-editor">
+              <div className="editor-section-title"><div><span>HIDDEN EXERCISES</span><strong>{hiddenExercises.length} exercise disembunyikan</strong></div></div>
+              <div className="hidden-exercise-list">
+                {hiddenExercises.map(({ exercise, index }) => (
+                  <article className="hidden-exercise-row" key={exercise.clientId}>
+                    <span><EyeOff size={17} /></span>
+                    <div><strong>{exercise.name}</strong><small>Tidak tampil di routine dan statistik</small></div>
+                    <button type="button" onClick={() => void showExercise(index)} disabled={visibilitySavingId === exercise.clientId}>
+                      {visibilitySavingId === exercise.clientId ? <LoaderCircle className="spin" size={14} /> : <Eye size={14} />} Tampilkan
+                    </button>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
 
           {!draft.id && <>
             <div className="editor-section-title"><div><span>EXERCISES</span><strong>{draft.exercises.length} gerakan</strong></div><button type="button" onClick={() => setDraft({ ...draft, exercises: [...draft.exercises, newExercise()] })}><Plus size={16} /> Add exercise</button></div>

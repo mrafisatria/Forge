@@ -9,6 +9,7 @@ export type Exercise = {
   id: string;
   name: string;
   target_reps: string | null;
+  is_hidden: boolean;
   image_url: string | null;
   image_path: string | null;
   sort_order: number;
@@ -34,6 +35,7 @@ export type DraftExercise = {
   clientId: string;
   name: string;
   targetReps: string;
+  isHidden: boolean;
   imageUrl: string | null;
   imagePath: string | null;
   sets: DraftSet[];

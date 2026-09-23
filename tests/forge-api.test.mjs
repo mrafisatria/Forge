@@ -17,6 +17,7 @@ function fixture() {
       forge_accounts: [{ id: owner, name: 'Rafi', active: true }],
       forge_sessions: [],
       gym_routines: [],
+      gym_exercises: [],
       forge_media: [],
     },
     attempts: new Map(), calls: [], writes: [], error: null, objects: new Map(),
@@ -173,6 +174,21 @@ test('metadata editing leaves exercises unchanged; another owner cannot be delet
   assert.equal(state.tables.gym_routines.length, 2);
 });
 
+test('exercise visibility can only be changed inside its owned routine', async () => {
+  const { request, login, state } = fixture();
+  const session = await login();
+  state.tables.gym_exercises.push(
+    { id: imageId, routine_id: routineId, user_id: owner, is_hidden: false },
+    { id: otherId, routine_id: routineId, user_id: otherId, is_hidden: false },
+  );
+  const hidden = await request('/routines', { method: 'PATCH', token: session.session_token, body: { id: routineId, exercise_id: imageId, is_hidden: true } });
+  assert.equal(hidden.status, 200);
+  assert.equal(state.tables.gym_exercises[0].is_hidden, true);
+  assert.equal((await request('/routines', { method: 'PATCH', token: session.session_token, body: { id: routineId, exercise_id: otherId, is_hidden: true } })).status, 404);
+  assert.equal(state.tables.gym_exercises[1].is_hidden, false);
+  assert.equal((await request('/routines', { method: 'PATCH', token: session.session_token, body: { id: routineId, exercise_id: imageId, is_hidden: 'yes' } })).status, 400);
+});
+
 test('exercise replacement does not accept routine metadata', async () => {
   const { request, login, state } = fixture();
   const session = await login();
@@ -181,10 +197,13 @@ test('exercise replacement does not accept routine metadata', async () => {
   assert.equal(state.writes[0].p_name, null);
 });
 
-test('validation allows target ranges and decimal kg, and rejects invalid exercise data', () => {
-  const input = [{ name: 'Bench', target_reps: ' 6–8 ', sets: [{ weight_kg: 2.5, reps: 10 }] }];
+test('validation allows target ranges, visibility and decimal kg, and rejects invalid exercise data', () => {
+  const input = [{ name: 'Bench', target_reps: ' 6–8 ', is_hidden: true, sets: [{ weight_kg: 2.5, reps: 10 }] }];
   assert.equal(exercises(input, owner, routineId)[0].target_reps, '6-8');
+  assert.equal(exercises(input, owner, routineId)[0].is_hidden, true);
+  assert.equal(exercises([{ ...input[0], is_hidden: undefined }], owner, routineId)[0].is_hidden, false);
   assert.equal(exercises(input, owner, routineId)[0].sets[0].weight_kg, 2.5);
+  assert.throws(() => exercises([{ ...input[0], is_hidden: 'yes' }], owner, routineId));
   for (const target_reps of ['8-6', 'six-eight', '1-10001', 8]) assert.throws(() => exercises([{ ...input[0], target_reps }], owner, routineId));
   for (const kg of [-1, Infinity, NaN, 2.555, '2,5']) assert.throws(() => exercises([{ ...input[0], sets: [{ weight_kg: kg, reps: 10 }] }], owner, routineId));
   assert.throws(() => exercises([{ ...input[0], sets: [{ weight_kg: 5, reps: 2.5 }] }], owner, routineId));

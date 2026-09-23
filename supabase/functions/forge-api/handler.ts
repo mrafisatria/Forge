@@ -86,7 +86,7 @@ async function login(request: Request, admin: SupabaseClient, fingerprintKey: st
   return json({ session_token: token, expires_at: expiresAt, user: { id: account.account_id, name: 'Rafi' } });
 }
 
-const routineColumns = 'id,name,training_day,note,created_at,gym_exercises(id,name,target_reps,image_path,sort_order,gym_exercise_sets(id,set_number,weight_kg,reps))';
+const routineColumns = 'id,name,training_day,note,created_at,gym_exercises(id,name,target_reps,is_hidden,image_path,sort_order,gym_exercise_sets(id,set_number,weight_kg,reps))';
 
 async function listRoutines(admin: SupabaseClient, owner: string) {
   const { data, error } = await admin.from('gym_routines').select(routineColumns).eq('user_id', owner).order('created_at', { ascending: false });
@@ -107,6 +107,17 @@ async function routines(request: Request, admin: SupabaseClient, user: { id: str
   if (!['POST', 'PATCH', 'PUT', 'DELETE'].includes(request.method)) throw new HttpError('Metode tidak didukung.', 405);
   const body = await readJson(request);
   const id = uuid(body.id);
+  if (request.method === 'PATCH' && Object.hasOwn(body, 'exercise_id')) {
+    const exerciseId = uuid(body.exercise_id);
+    if (typeof body.is_hidden !== 'boolean') throw new HttpError('Status exercise tidak valid.', 400);
+    const { data, error } = await admin.from('gym_exercises')
+      .update({ is_hidden: body.is_hidden })
+      .eq('id', exerciseId).eq('routine_id', id).eq('user_id', user.id)
+      .select('id').maybeSingle();
+    if (error) throw error;
+    if (!data) throw new HttpError('Exercise tidak ditemukan.', 404);
+    return json({ ok: true, id, exercise_id: exerciseId, is_hidden: body.is_hidden });
+  }
   if (request.method === 'POST' || request.method === 'PUT') {
     const items = exercises(body.exercises, user.id, id);
     const reusablePaths = [...new Set(items.map((item) => item.image_path).filter((path): path is string => Boolean(path) && !path!.startsWith(`${user.id}/${id}/`)))];

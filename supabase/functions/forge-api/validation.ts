@@ -61,6 +61,12 @@ function targetReps(value: unknown): string | null {
   return match[2] ? `${minimum}-${maximum}` : String(minimum);
 }
 
+function hidden(value: unknown): boolean {
+  if (value === undefined) return false;
+  if (typeof value !== 'boolean') throw new HttpError('Status exercise tidak valid.', 400);
+  return value;
+}
+
 export function exercises(value: unknown, owner: string, routineId: string) {
   if (!Array.isArray(value) || value.length > 100) throw new HttpError('Maksimal 100 exercise per routine.', 400);
   return value.map((entry, index) => {
@@ -69,6 +75,7 @@ export function exercises(value: unknown, owner: string, routineId: string) {
     return {
       name: text(item.name, 'Nama exercise', 120, true)!,
       target_reps: targetReps(item.target_reps),
+      is_hidden: hidden(item.is_hidden),
       image_path: imagePath(item.image_path, owner, routineId), sort_order: index,
       sets: item.sets.map((entry, setIndex) => {
         const set = object(entry);
