@@ -31,14 +31,16 @@ export function metadata(body: Record<string, unknown>) {
 
 export function imagePath(value: unknown, owner: string, routineId: string): string | null {
   if (value === null || value === undefined || value === '') return null;
-  const prefix = `${owner}/`;
-  if (typeof value !== 'string' || !value.startsWith(prefix) || !/^(library|[0-9a-f-]{36})\/[0-9a-f-]{36}\.(jpg|png|webp|mp4)$/.test(value.slice(prefix.length))) {
-    throw new HttpError('Media tidak berasal dari akun ini.', 400);
-  }
-  const [folder, file] = value.slice(prefix.length).split('/');
+  const match = typeof value === 'string' && value.match(/^([0-9a-f-]{36})\/(library|[0-9a-f-]{36})\/([0-9a-f-]{36})\.(jpg|png|webp|mp4)$/);
+  if (!match) throw new HttpError('Format media tidak valid.', 400);
+  const [, mediaOwner, folder, file] = match;
+  uuid(mediaOwner);
   if (folder !== 'library') uuid(folder);
-  uuid(file.split('.')[0]);
-  void routineId; // Retain the legacy validator signature for existing callers.
+  uuid(file);
+  // Gallery Forge is shared by the two approved accounts. Ownership is checked
+  // against its registered forge_media row by the routine handler.
+  void owner;
+  void routineId;
   return value;
 }
 

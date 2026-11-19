@@ -215,7 +215,7 @@ test('validation allows target ranges, visibility and decimal kg, and rejects in
   assert.throws(() => exercises(Array(101).fill(input[0]), owner, routineId));
   assert.throws(() => metadata({ name: ' ' }));
   assert.throws(() => secret('a'.repeat(73)));
-  assert.throws(() => imagePath(`${otherId}/${routineId}/${imageId}.png`, owner, routineId));
+  assert.equal(imagePath(`${otherId}/${routineId}/${imageId}.png`, owner, routineId), `${otherId}/${routineId}/${imageId}.png`);
   assert.throws(() => imagePath('https://arbitrary.example/image.png', owner, routineId));
   assert.throws(() => imagePath(`${owner}/${routineId}/../../../secret`, owner, routineId));
   assert.equal(imagePath(`${owner}/${routineId}/${imageId}.png`, owner, routineId), `${owner}/${routineId}/${imageId}.png`);
@@ -278,7 +278,7 @@ test('media routes reject anonymous users and unsupported operations', async () 
   assert.equal((await request('/media', { method: 'DELETE', token: session.session_token })).status, 405);
 });
 
-test('media uploads persist metadata, deduplicate retries, and return private signed links', async () => {
+test('media uploads are shared, deduplicate across accounts, and return private signed links', async () => {
   const { request, login, state } = fixture(); const { session_token: token } = await login();
   const body = new FormData(); body.append('file', new File([mp4Fixture()], 'bench.mp4', { type: 'video/mp4' }));
   const uploaded = await request('/media', { method: 'POST', token, body });
@@ -289,15 +289,18 @@ test('media uploads persist metadata, deduplicate retries, and return private si
   assert.match(first.media.image_url, /^https:\/\/signed.test\//);
   const retry = await request('/media', { method: 'POST', token, body });
   assert.equal(retry.status, 200); assert.equal((await retry.json()).reused, true);
+  const { session_token: alifaToken } = await login('alifa');
+  const sharedRetry = await request('/media', { method: 'POST', token: alifaToken, body });
+  assert.equal(sharedRetry.status, 200); assert.equal((await sharedRetry.json()).reused, true);
   assert.equal(state.objects.size, 1); assert.equal(state.tables.forge_media.length, 1);
   state.tables.forge_media.push({ id: otherId, user_id: otherId, name: 'Private other', image_path: `${otherId}/library/${imageId}.png` });
   const list = await request('/media', { token }); assert.equal(list.status, 200);
-  assert.equal((await list.json()).media.length, 1);
+  assert.equal((await list.json()).media.length, 2);
   const search = await request('/media?q=missing', { token }); assert.equal((await search.json()).media.length, 0);
   assert.equal((await request('/media?offset=-1', { token })).status, 400);
 });
 
-test('gallery selection can be reused across routines but rejects missing or foreign media', async () => {
+test('gallery selection can be reused across routines, including media uploaded by Alifa', async () => {
   const { request, login, state } = fixture(); const { session_token: token } = await login();
   const path = `${owner}/library/${imageId}.png`;
   const makeBody = (image_path) => ({ id: routineId, name: 'My routine', exercises: [{ name: 'Bench', image_path, sets: [{ weight_kg: 2.5, reps: 10 }] }] });
@@ -305,7 +308,9 @@ test('gallery selection can be reused across routines but rejects missing or for
   state.tables.forge_media.push({ id: imageId, user_id: owner, image_path: path });
   assert.equal((await request('/routines', { method: 'POST', token, body: makeBody(path) })).status, 201);
   assert.equal((await request('/routines', { method: 'PUT', token, body: { ...makeBody(path), id: otherId } })).status, 200);
-  assert.equal((await request('/routines', { method: 'POST', token, body: makeBody(`${otherId}/library/${imageId}.png`) })).status, 400);
+  const alifaPath = `${alifa}/library/${imageId}.png`;
+  state.tables.forge_media.push({ id: otherId, user_id: alifa, image_path: alifaPath });
+  assert.equal((await request('/routines', { method: 'POST', token, body: makeBody(alifaPath) })).status, 201);
   assert.equal(state.writes[0].p_exercises[0].image_path, path);
   assert.equal(state.objects.size, 0, 'Selecting media never uploads copies');
 });
@@ -332,7 +337,7 @@ test('image library uploads and legacy photo uploads are both registered', async
   assert.equal(state.tables.forge_media.length, 2);
 });
 
-test('gallery pagination returns the next page without leaking another account', async () => {
+test('shared gallery pagination returns the next page for all Forge media', async () => {
   const { request, login, state } = fixture(); const { session_token: token } = await login();
   state.tables.forge_media.push(...Array.from({ length: 65 }, (_, index) => ({ id: String(index), name: 'Photo ' + index, user_id: owner, image_path: `${owner}/library/${index}.png` })));
   const first = await (await request('/media', { token })).json();

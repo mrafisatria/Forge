@@ -122,9 +122,9 @@ async function routines(request: Request, admin: SupabaseClient, user: { id: str
     const items = exercises(body.exercises, user.id, id);
     const reusablePaths = [...new Set(items.map((item) => item.image_path).filter((path): path is string => Boolean(path) && !path!.startsWith(`${user.id}/${id}/`)))];
     if (reusablePaths.length) {
-      const { data: owned, error: mediaError } = await admin.from('forge_media').select('image_path').eq('user_id', user.id).in('image_path', reusablePaths);
+      const { data: media, error: mediaError } = await admin.from('forge_media').select('image_path').in('image_path', reusablePaths);
       if (mediaError) throw mediaError;
-      if (reusablePaths.some((path) => !owned?.some((item) => item.image_path === path))) throw new HttpError('Media tidak ditemukan di galeri akun ini.', 400);
+      if (reusablePaths.some((path) => !media?.some((item) => item.image_path === path))) throw new HttpError('Media tidak ditemukan di galeri bersama.', 400);
     }
     const info = request.method === 'POST' ? metadata(body) : null;
     const { error } = await admin.rpc('write_forge_routine', {
@@ -187,7 +187,7 @@ async function media(request: Request, admin: SupabaseClient, owner: string) {
     const offset = Number(params.get('offset') ?? 0);
     if (!Number.isSafeInteger(offset) || offset < 0 || offset > 100000) throw new HttpError('Halaman tidak valid.', 400);
     const search = (params.get('q') ?? '').trim().slice(0, 100).replace(/[%_\\]/g, '');
-    let query = admin.from('forge_media').select(mediaColumns).eq('user_id', owner);
+    let query = admin.from('forge_media').select(mediaColumns);
     if (search) query = query.ilike('name', `%${search}%`);
     const { data, error } = await query.order('created_at', { ascending: false }).order('id').range(offset, offset + 60);
     if (error) throw error;
@@ -203,7 +203,7 @@ async function media(request: Request, admin: SupabaseClient, owner: string) {
   const info = await validateMedia(file);
   const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
   const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
-  const lookup = () => admin.from('forge_media').select(mediaColumns).eq('user_id', owner).eq('content_hash', hash).maybeSingle();
+  const lookup = () => admin.from('forge_media').select(mediaColumns).eq('content_hash', hash).maybeSingle();
   const { data: existing, error: lookupError } = await lookup();
   if (lookupError) throw lookupError;
   if (existing) return json({ media: (await signedMedia(admin, [existing]))[0], reused: true });
