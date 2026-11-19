@@ -5,7 +5,7 @@ const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 export const isSupabaseConfigured = Boolean(supabaseUrl && publishableKey);
 export const sessionStorageKey = 'forge_app_session';
 
-export type ForgeUser = { id: string; name: 'Rafi' };
+export type ForgeUser = { id: string; name: 'Rafi' | 'Alifa' };
 export type ForgeSession = { session_token: string; expires_at: string; user: ForgeUser };
 export type RoutinesResponse = { routines: Routine[]; user: ForgeUser };
 
@@ -40,7 +40,7 @@ export async function apiRequest<T>(path: string, options: {
 export function readSession(): ForgeSession | null {
   try {
     const value = JSON.parse(window.localStorage.getItem(sessionStorageKey) ?? 'null');
-    if (value?.user?.name === 'Rafi' && typeof value.session_token === 'string'
+    if (['Rafi', 'Alifa'].includes(value?.user?.name) && typeof value.session_token === 'string'
       && value.session_token.startsWith('forge_') && Date.parse(value.expires_at) > Date.now()) return value;
     window.localStorage.removeItem(sessionStorageKey);
   } catch { /* Storage dapat dinonaktifkan oleh browser. */ }

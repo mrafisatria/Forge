@@ -29,6 +29,7 @@ import { ExerciseMediaButton } from './exercise-media-button';
 import { RestTimer } from './rest-timer';
 
 const uid = () => crypto.randomUUID();
+const initials = (name: string) => name.slice(0, 2).toUpperCase();
 
 function parseWeight(value: string) {
   const normalized = value.trim().replace(',', '.');
@@ -394,7 +395,7 @@ export default function WorkoutApp() {
         <header className="topbar">
           <button className="mobile-menu-button" onClick={() => setMobileMenu(true)} aria-label="Buka menu"><Menu size={20} /></button>
           <div><p className="eyebrow">WORKOUT</p><h1>{selectedRoutine ? selectedRoutine.name : 'Ready to get stronger?'}</h1></div>
-          <div className="profile-chip"><div className="avatar">RA</div><div><strong>{session.user.name}</strong><span>Keep showing up</span></div></div>
+          <div className="profile-chip"><div className="avatar">{initials(session.user.name)}</div><div><strong>{session.user.name}</strong><span>Keep showing up</span></div></div>
         </header>
         {loadError && <div className="connection-error" role="alert"><span>{loadError}</span><button className="secondary-button" onClick={() => void loadRoutines(session.session_token).catch(() => {})}>Coba lagi</button></div>}
         {selectedRoutine ? (
@@ -810,15 +811,14 @@ function AuthScreen({ onAuthenticated, initialError }: { onAuthenticated: (sessi
       <section className="auth-form-panel">
         <form className="auth-card" onSubmit={submit}>
           <div className="auth-icon"><CircleUserRound size={24} /></div>
-          <p className="eyebrow">WELCOME BACK, RAFI</p><h2>Masuk ke Forge</h2><p className="auth-subtitle">Gunakan secret key untuk membuka workout kamu.</p>
-          <div className="auth-account"><div className="avatar">RA</div><div><strong>Rafi</strong><span>Akun pribadi</span></div></div>
+          <p className="eyebrow">WELCOME TO FORGE</p><h2>Masuk ke Forge</h2><p className="auth-subtitle">Gunakan secret key untuk membuka workout kamu.</p>
+          <div className="auth-account"><div className="avatar"><CircleUserRound size={18} /></div><div><strong>Akun Forge</strong><span>Rafi & Alifa</span></div></div>
           {!isSupabaseConfigured && <p className="auth-error" role="alert">Koneksi Supabase belum dikonfigurasi. Tambahkan konfigurasi database di pengaturan deployment.</p>}
-          <input type="text" name="username" autoComplete="username" value="Rafi" readOnly hidden />
           <label className="field"><span>Secret key</span><input name="password" type={visible ? 'text' : 'password'} value={secretKey} onChange={(event) => setSecretKey(event.target.value)} autoComplete="current-password" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="Masukkan secret key" required maxLength={72} disabled={busy} aria-describedby={error ? 'login-error' : undefined} /></label>
           <button type="button" className="secret-toggle" onClick={() => setVisible(!visible)} aria-pressed={visible}>{visible ? 'Sembunyikan secret key' : 'Tampilkan secret key'}</button>
           {error && <p id="login-error" className="auth-error" role="alert">{error}</p>}
           <button className="auth-submit" disabled={busy || !isSupabaseConfigured}>{busy ? <LoaderCircle className="spin" size={18} /> : 'Masuk ke Forge'}<ChevronRight size={18} /></button>
-          <p className="auth-footnote">Khusus akun Rafi. Tidak ada pendaftaran akun baru.</p>
+          <p className="auth-footnote">Hanya akun yang sudah dibuat yang dapat masuk.</p>
         </form>
       </section>
     </main>

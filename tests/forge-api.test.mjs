@@ -6,6 +6,7 @@ import { validateMedia, mp4Duration } from '../supabase/functions/forge-api/medi
 import { validateUploadSize, isVideoPath } from '../lib/media.ts';
 
 const owner = '10000000-0000-4000-8000-000000000001';
+const alifa = '10000000-0000-4000-8000-000000000005';
 const routineId = '20000000-0000-4000-8000-000000000002';
 const otherId = '30000000-0000-4000-8000-000000000003';
 const imageId = '40000000-0000-4000-8000-000000000004';
@@ -14,7 +15,7 @@ const testSecret = 'test-fixture-only';
 function fixture() {
   const state = {
     tables: {
-      forge_accounts: [{ id: owner, name: 'Rafi', active: true }],
+      forge_accounts: [{ id: owner, name: 'Rafi', active: true }, { id: alifa, name: 'Alifa', active: true }],
       forge_sessions: [],
       gym_routines: [],
       gym_exercises: [],
@@ -65,8 +66,9 @@ function fixture() {
     rpc(name, args) {
       state.calls.push(name);
       if (name === 'verify_forge_account') return { async maybeSingle() {
-        const account = state.tables.forge_accounts[0];
-        return { data: args.candidate_secret === testSecret && account.active ? { account_id: owner, account_name: account.name } : null, error: null };
+        const account = args.candidate_secret === testSecret ? state.tables.forge_accounts.find((item) => item.id === owner)
+          : args.candidate_secret === 'alifa' ? state.tables.forge_accounts.find((item) => item.id === alifa) : null;
+        return { data: account?.active ? { account_id: account.id, account_name: account.name } : null, error: null };
       } };
       if (name === 'reserve_forge_login_attempt') {
         const n = state.attempts.get(args.p_fingerprint) ?? 0;
@@ -88,22 +90,24 @@ function fixture() {
       method, headers, body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),
     }));
   }
-  async function login() {
-    const response = await request('/login', { method: 'POST', body: { secret_key: testSecret } });
+  async function login(secret_key = testSecret) {
+    const response = await request('/login', { method: 'POST', body: { secret_key } });
     assert.equal(response.status, 200);
     return response.json();
   }
   return { state, request, login, handler };
 }
 
-test('only Rafi can log in; only a token hash is stored', async () => {
+test('Rafi and Alifa can log in; only token hashes are stored', async () => {
   const { login, state } = fixture();
-  const session = await login();
-  assert.equal(session.user.name, 'Rafi');
-  assert.match(session.session_token, /^forge_[A-Za-z0-9_-]{43}$/);
-  assert.equal(state.tables.forge_sessions[0].token_hash, await sha256(session.session_token));
+  const rafiSession = await login();
+  const alifaSession = await login('alifa');
+  assert.equal(rafiSession.user.name, 'Rafi');
+  assert.equal(alifaSession.user.name, 'Alifa');
+  assert.match(alifaSession.session_token, /^forge_[A-Za-z0-9_-]{43}$/);
+  assert.equal(state.tables.forge_sessions[1].token_hash, await sha256(alifaSession.session_token));
   assert.ok(!JSON.stringify(state.tables).includes(testSecret));
-  assert.ok(!JSON.stringify(state.tables).includes(session.session_token));
+  assert.ok(!JSON.stringify(state.tables).includes(alifaSession.session_token));
 });
 
 test('incorrect key is rejected and registration does not exist', async () => {
@@ -113,10 +117,10 @@ test('incorrect key is rejected and registration does not exist', async () => {
   assert.equal(state.tables.forge_sessions.length, 0);
 });
 
-test('a credential matching any other name still cannot log in', async () => {
+test('an unsupported account cannot log in', async () => {
   const { request, state } = fixture();
-  state.tables.forge_accounts[0].name = 'Other';
-  assert.equal((await request('/login', { method: 'POST', body: { secret_key: testSecret } })).status, 401);
+  state.tables.forge_accounts.push({ id: otherId, name: 'Other', active: true });
+  assert.equal((await request('/login', { method: 'POST', body: { secret_key: 'other' } })).status, 401);
 });
 
 test('ninth failed login attempt is throttled', async () => {

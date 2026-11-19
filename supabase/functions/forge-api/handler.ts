@@ -56,8 +56,8 @@ async function authenticate(request: Request, admin: SupabaseClient) {
   }
   const { data: account, error: accountError } = await admin.from('forge_accounts').select('id,name,active').eq('id', session.account_id).maybeSingle();
   if (accountError) throw accountError;
-  if (!account?.active || account.name !== 'Rafi') throw new HttpError('Akun tidak tersedia.', 401);
-  return { tokenHash, user: { id: account.id as string, name: 'Rafi' } };
+  if (!account?.active || !['Rafi', 'Alifa'].includes(account.name)) throw new HttpError('Akun tidak tersedia.', 401);
+  return { tokenHash, user: { id: account.id as string, name: account.name as 'Rafi' | 'Alifa' } };
 }
 
 async function login(request: Request, admin: SupabaseClient, fingerprintKey: string) {
@@ -75,7 +75,7 @@ async function login(request: Request, admin: SupabaseClient, fingerprintKey: st
   }
   const { data: account, error } = await admin.rpc('verify_forge_account', { candidate_secret: candidate }).maybeSingle<{ account_id: string; account_name: string }>();
   if (error) throw error;
-  if (!account || account.account_name !== 'Rafi') throw new HttpError('Secret key tidak dikenali.', 401);
+  if (!account || !['Rafi', 'Alifa'].includes(account.account_name)) throw new HttpError('Secret key tidak dikenali.', 401);
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   const token = 'forge_' + btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
   const expiresAt = new Date(Date.now() + SESSION_MS).toISOString();
@@ -83,7 +83,7 @@ async function login(request: Request, admin: SupabaseClient, fingerprintKey: st
   if (sessionError) throw sessionError;
   // Best-effort expiry cleanup never touches Dompetku sessions.
   await admin.from('forge_sessions').delete().lt('expires_at', new Date().toISOString());
-  return json({ session_token: token, expires_at: expiresAt, user: { id: account.account_id, name: 'Rafi' } });
+  return json({ session_token: token, expires_at: expiresAt, user: { id: account.account_id, name: account.account_name as 'Rafi' | 'Alifa' } });
 }
 
 const routineColumns = 'id,name,training_day,note,created_at,gym_exercises(id,name,target_reps,is_hidden,image_path,sort_order,gym_exercise_sets(id,set_number,weight_kg,reps))';

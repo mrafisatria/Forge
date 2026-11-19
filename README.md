@@ -4,7 +4,7 @@ Gym tracker Next.js untuk routine, exercise, foto, set, beban KG (termasuk koma 
 
 ## Login dan keamanan
 
-- Hanya **satu akun Rafi**, dibatasi juga oleh constraint database. Tidak ada pendaftaran atau login email.
+- Hanya akun yang dibuat oleh admin (**Rafi** dan **Alifa**), dibatasi juga oleh constraint database. Tidak ada pendaftaran atau login email.
 - Pola login seperti Dompetku: secret key diverifikasi bcrypt di server, token acak 256-bit berlaku 30 hari, hanya hash token yang disimpan di database.
 - Secret akun tidak disimpan di source, GitHub, atau variable frontend.
 - Sesi dan akun Forge menggunakan tabel sendiri; token Dompetku tidak diterima.
@@ -25,14 +25,14 @@ Tekan gambar atau video pada exercise untuk melihatnya lebih besar dalam popup. 
 
 1. Jalankan **supabase/schema.sql** di SQL Editor proyek tujuan. Skrip ini untuk instalasi Forge baru, bukan migrasi dari versi Supabase Auth lama. Tidak mengubah tabel Dompetku.
 2. Buat hash bcrypt secret akun secara lokal memakai **scripts/hash-account-secret.mjs** (membaca dari stdin). Jangan menyimpan secret maupun hash di repository.
-3. Melalui SQL Editor administratif, masukkan hash untuk akun Rafi:
+3. Melalui SQL Editor administratif, masukkan hash untuk akun yang ingin dibuat:
 
 ~~~sql
 insert into public.forge_accounts (name, secret_hash)
 values ('Rafi', '<BCRYPT_HASH>');
 ~~~
 
-Jangan jalankan dengan placeholder. Constraint singleton menolak akun kedua. Untuk mengganti secret, perbarui hash melalui administrasi dan cabut sesi Forge yang lama.
+Jangan jalankan dengan placeholder. Nama akun harus Rafi atau Alifa dan hanya boleh satu kali. Untuk mengganti secret, perbarui hash melalui administrasi dan cabut sesi Forge yang lama.
 
 4. Deploy folder **supabase/functions/forge-api**:
 

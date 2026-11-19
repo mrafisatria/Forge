@@ -6,8 +6,7 @@ create extension if not exists pgcrypto with schema extensions;
 
 create table if not exists public.forge_accounts (
   id uuid primary key default gen_random_uuid(),
-  singleton boolean not null default true unique check (singleton),
-  name text not null default 'Rafi' check (name = 'Rafi'),
+  name text not null unique check (name in ('Rafi', 'Alifa')),
   secret_hash text not null,
   active boolean not null default true,
   created_at timestamptz not null default now()
@@ -100,7 +99,7 @@ returns table(account_id uuid, account_name text)
 language sql security invoker set search_path = ''
 as $$
   select id, name from public.forge_accounts
-  where active and singleton and name = 'Rafi'
+  where active
     and octet_length(candidate_secret) between 1 and 72
     and secret_hash = extensions.crypt(candidate_secret, secret_hash)
 $$;
@@ -138,7 +137,7 @@ declare
   v_exercise_id uuid;
   v_set jsonb;
 begin
-  if not exists (select 1 from public.forge_accounts where id = p_user_id and active and name = 'Rafi') then
+  if not exists (select 1 from public.forge_accounts where id = p_user_id and active) then
     raise exception 'Account unavailable' using errcode = '42501';
   end if;
   if p_exercises is null or jsonb_typeof(p_exercises) <> 'array' or jsonb_array_length(p_exercises) > 100 then
